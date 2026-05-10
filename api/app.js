@@ -44,11 +44,13 @@ function initialState() {
 }
 
 async function kvRequest(command) {
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) return null;
-  const response = await fetch(process.env.KV_REST_API_URL, {
+  const apiUrl = process.env.KV_REST_API_URL || process.env.kv_KV_REST_API_URL || process.env.STORAGE_REST_API_URL;
+  const apiToken = process.env.KV_REST_API_TOKEN || process.env.kv_KV_REST_API_TOKEN || process.env.STORAGE_REST_API_TOKEN;
+  if (!apiUrl || !apiToken) return null;
+  const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+      Authorization: `Bearer ${apiToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(command),
