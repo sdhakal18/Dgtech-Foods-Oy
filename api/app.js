@@ -38,6 +38,10 @@ function initialState() {
       targetMonth: 4,
       targetBlock: "2",
     },
+    quickDuplicate: {
+      targetWeek: "",
+      targetThreeWeeks: "",
+    },
     employees: employeesDefault,
     locations: locationsDefault,
     months: {},
@@ -99,6 +103,7 @@ function normalizeStore(value) {
     months: value?.months ?? {},
     report: { ...base.report, ...(value?.report ?? {}) },
     duplicate: { ...base.duplicate, ...(value?.duplicate ?? {}) },
+    quickDuplicate: { ...base.quickDuplicate, ...(value?.quickDuplicate ?? {}) },
     history: value?.history ?? [],
     auth: {
       employers: value?.auth?.employers ?? [],
@@ -142,6 +147,7 @@ function publicState(state, user = null, inviteToken = "") {
     activeEmployee: user?.type === "employee" ? user.employeeName : state.activeEmployee,
     report: state.report,
     duplicate: state.duplicate,
+    quickDuplicate: state.quickDuplicate,
     employees: state.employees,
     locations: state.locations,
     months: state.months,
@@ -270,6 +276,7 @@ module.exports = async function handler(req, res) {
       state.activeEmployee = next.activeEmployee;
       state.report = next.report;
       state.duplicate = next.duplicate ?? state.duplicate;
+      state.quickDuplicate = next.quickDuplicate ?? state.quickDuplicate;
       state.employees = next.employees;
       state.locations = next.locations;
       state.months = next.months;

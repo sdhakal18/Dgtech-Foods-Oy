@@ -53,6 +53,10 @@ const initialState = {
     targetMonth: 4,
     targetBlock: "2",
   },
+  quickDuplicate: {
+    targetWeek: "",
+    targetThreeWeeks: "",
+  },
   history: [],
   employees: employeesDefault,
   locations: locationsDefault,
@@ -105,6 +109,8 @@ const el = {
   copyLastWeek: document.querySelector("#copyLastWeek"),
   copyLastThreeWeeks: document.querySelector("#copyLastThreeWeeks"),
   copyLastMonth: document.querySelector("#copyLastMonth"),
+  quickTargetWeek: document.querySelector("#quickTargetWeek"),
+  quickTargetThreeWeeks: document.querySelector("#quickTargetThreeWeeks"),
   employeeEditor: document.querySelector("#employeeEditor"),
   locationEditor: document.querySelector("#locationEditor"),
   employerEditor: document.querySelector("#employerEditor"),
@@ -173,6 +179,7 @@ function mergeLoadedState(parsed) {
     activeEmployee: parsed.activeEmployee ?? employeesDefault[0],
     report: { ...structuredClone(initialState.report), ...(parsed.report ?? {}) },
     duplicate: { ...structuredClone(initialState.duplicate), ...(parsed.duplicate ?? {}) },
+    quickDuplicate: { ...structuredClone(initialState.quickDuplicate), ...(parsed.quickDuplicate ?? {}) },
     history: parsed.history ?? [],
   };
 }
@@ -193,6 +200,7 @@ function stateForServer() {
     activeEmployee: state.activeEmployee,
     report: state.report,
     duplicate: state.duplicate,
+    quickDuplicate: state.quickDuplicate,
     history: state.history,
     employees: state.employees,
     locations: state.locations,
@@ -621,6 +629,7 @@ function renderSelectors() {
   });
 
   renderReportSelectors();
+  renderQuickDuplicateControls();
 }
 
 function renderSelect(select, values, selectedValue) {
@@ -681,6 +690,16 @@ function renderReportSelectors() {
   }
 }
 
+function renderQuickDuplicateControls() {
+  if (!el.quickTargetWeek || !el.quickTargetThreeWeeks) return;
+  const weekBlocks = duplicateBlocks("week", state.year, state.month);
+  const threeWeekBlocks = duplicateBlocks("threeWeeks", state.year, state.month);
+  if (!weekBlocks.some((block) => block.value === state.quickDuplicate.targetWeek)) state.quickDuplicate.targetWeek = weekBlocks[0]?.value ?? "";
+  if (!threeWeekBlocks.some((block) => block.value === state.quickDuplicate.targetThreeWeeks)) state.quickDuplicate.targetThreeWeeks = threeWeekBlocks[0]?.value ?? "";
+  el.quickTargetWeek.innerHTML = weekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.quickDuplicate.targetWeek ? "selected" : ""}>${esc(block.label)}</option>`).join("");
+  el.quickTargetThreeWeeks.innerHTML = threeWeekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.quickDuplicate.targetThreeWeeks ? "selected" : ""}>${esc(block.label)}</option>`).join("");
+}
+
 function renderShell() {
   el.pageTitle.textContent = `${monthNames[state.month]} ${state.year} Schedule`;
   el.pageMeta.textContent = isEmployee() ? `${state.activeEmployee} read-only team schedule` : state.locations.join(" and ");
@@ -692,29 +711,44 @@ function renderShell() {
 }
 
 function renderSchedule() {
-  const data = ensureMonth();
   const filter = el.employeeFilter.value.trim().toLowerCase();
   const employees = visibleEmployees().filter((employee) => employee.toLowerCase().includes(filter));
   const rows = [];
   rows.push(`<table><thead><tr><th>Date</th><th>Day</th>${employees.map((e) => `<th>${esc(e)}</th>`).join("")}<th>Daily Hours</th></tr></thead><tbody>`);
 
-  for (let day = 1; day <= daysInMonth(); day += 1) {
-    const info = dayInfo(day);
-    const total = employees.reduce((sum, employee) => sum + hoursFromShift(data[day][employee].shift), 0);
-    const redClass = info.isRedDay ? " red-day-row" : "";
-    const redTitle = info.holidayName || (info.isSunday ? "Sunday" : "");
-    rows.push(`<tr class="${redClass.trim()}" title="${esc(redTitle)}"><td class="date-cell ${info.isRedDay ? "red-day-cell" : ""}">${day}</td><td class="day-cell ${info.isRedDay ? "red-day-cell" : ""}">${dayLabel(info)}</td>`);
-    for (const employee of employees) {
-      const entry = data[day][employee];
-      rows.push(`<td>${shiftSelect(day, employee, entry.shift)}</td>`);
+  for (const block of duplicateBlocks("week", state.year, state.month)) {
+    const visibleDates = block.dates.filter((date) => date.getFullYear() === state.year && date.getMonth() === state.month);
+    if (!visibleDates.length) continue;
+    rows.push(`<tr class="week-divider"><td colspan="${employees.length + 3}">${esc(block.label)}</td></tr>`);
+    for (const date of visibleDates) {
+      const day = date.getDate();
+      const data = ensureMonth(state.year, state.month);
+      const info = dayInfo(day);
+      const total = employees.reduce((sum, employee) => sum + hoursFromShift(data[day][employee].shift), 0);
+      const redClass = info.isRedDay ? " red-day-row" : "";
+      const redTitle = info.holidayName || (info.isSunday ? "Sunday" : "");
+      rows.push(`<tr class="${redClass.trim()}" title="${esc(redTitle)}"><td class="date-cell ${info.isRedDay ? "red-day-cell" : ""}">${day}</td><td class="day-cell ${info.isRedDay ? "red-day-cell" : ""}">${dayLabel(info)}</td>`);
+      for (const employee of employees) {
+        const entry = data[day][employee];
+        rows.push(`<td>${shiftSelect(day, employee, entry.shift)}</td>`);
+      }
+      rows.push(`<td class="daily-total">${formatNumber(total)}</td></tr>`);
+      rows.push(`<tr class="${redClass.trim()}" title="${esc(redTitle)}"><td class="${info.isRedDay ? "red-day-cell" : ""}"></td><td class="restaurant-label ${info.isRedDay ? "red-day-cell" : ""}">Restaurant</td>`);
+      for (const employee of employees) {
+        const entry = data[day][employee];
+        rows.push(`<td>${locationSelect(day, employee, entry.location)}</td>`);
+      }
+      rows.push(`<td class="daily-total"></td></tr>`);
     }
-    rows.push(`<td class="daily-total">${formatNumber(total)}</td></tr>`);
-    rows.push(`<tr class="${redClass.trim()}" title="${esc(redTitle)}"><td class="${info.isRedDay ? "red-day-cell" : ""}"></td><td class="restaurant-label ${info.isRedDay ? "red-day-cell" : ""}">Restaurant</td>`);
-    for (const employee of employees) {
-      const entry = data[day][employee];
-      rows.push(`<td>${locationSelect(day, employee, entry.location)}</td>`);
-    }
-    rows.push(`<td class="daily-total"></td></tr>`);
+    const weeklyEmployeeTotals = employees.map((employee) =>
+      block.dates.reduce((sum, date) => {
+        if (date.getFullYear() !== state.year || date.getMonth() !== state.month) return sum;
+        const entry = dataForDate(date)?.[employee];
+        return sum + hoursFromShift(entry?.shift);
+      }, 0),
+    );
+    const weeklyTotal = weeklyEmployeeTotals.reduce((sum, value) => sum + value, 0);
+    rows.push(`<tr class="week-total-row"><td></td><td>Weekly total</td>${weeklyEmployeeTotals.map((total) => `<td>${formatNumber(total)}</td>`).join("")}<td>${formatNumber(weeklyTotal)}</td></tr>`);
   }
 
   rows.push("</tbody></table>");
@@ -1214,10 +1248,11 @@ function copyEntry(entry) {
   return { shift: entry?.shift || "00:00-00:00", location: entry?.location || state.locations[0] || "" };
 }
 
-function duplicateRecentDays(dayCount, label) {
+function duplicateRecentDays(dayCount, label, targetValue = "") {
   if (!isEmployer()) return;
   const period = dayCount === 21 ? "threeWeeks" : "week";
-  const targetBlock = duplicateBlocks(period, state.year, state.month)[0];
+  const targetBlocks = duplicateBlocks(period, state.year, state.month);
+  const targetBlock = targetBlocks.find((block) => block.value === targetValue) ?? targetBlocks[0];
   const targetDates = targetBlock?.dates ?? dateRange(new Date(state.year, state.month, 1), Math.min(dayCount, daysInMonth()));
   const sourceStart = addDays(targetDates[0], -dayCount);
   for (let offset = 0; offset < targetDates.length; offset += 1) {
@@ -1231,7 +1266,7 @@ function duplicateRecentDays(dayCount, label) {
       targetData[targetDay][employee] = copyEntry(sourceDayData?.[employee]);
     }
   }
-  logHistory(`Copied ${label} into current ${period === "week" ? "week" : "3-week period"}`);
+  logHistory(`Copied ${label} into ${targetBlock?.label ?? "current period"}`);
   saveState(true);
   render();
   toast(`Copied ${label}`);
@@ -1621,6 +1656,12 @@ document.addEventListener("change", (event) => {
     renderSettings();
     return;
   }
+  if ([el.quickTargetWeek, el.quickTargetThreeWeeks].includes(event.target)) {
+    state.quickDuplicate.targetWeek = el.quickTargetWeek.value;
+    state.quickDuplicate.targetThreeWeeks = el.quickTargetThreeWeeks.value;
+    saveState();
+    return;
+  }
   if (event.target.matches("[data-field]")) {
     updateEntry(event.target);
     return;
@@ -1741,8 +1782,8 @@ document.querySelector("#addEmployee").addEventListener("click", addEmployee);
 document.querySelector("#addLocation").addEventListener("click", addLocation);
 document.querySelector("#addEmployer").addEventListener("click", addEmployer);
 document.querySelector("#openReport").addEventListener("click", openReportWindow);
-el.copyLastWeek.addEventListener("click", () => duplicateRecentDays(7, "last week"));
-el.copyLastThreeWeeks.addEventListener("click", () => duplicateRecentDays(21, "last 3 weeks"));
+el.copyLastWeek.addEventListener("click", () => duplicateRecentDays(7, "last week", state.quickDuplicate.targetWeek));
+el.copyLastThreeWeeks.addEventListener("click", () => duplicateRecentDays(21, "last 3 weeks", state.quickDuplicate.targetThreeWeeks));
 el.copyLastMonth.addEventListener("click", duplicateLastMonth);
 el.duplicateShifts.addEventListener("click", duplicateShifts);
 el.setupForm.addEventListener("submit", createFirstEmployer);

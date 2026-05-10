@@ -422,6 +422,24 @@ input {
   font-weight: 800;
 }
 
+.schedule-duplicate label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 180px;
+}
+
+.schedule-duplicate select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 10px;
+}
+
 .schedule-duplicate button {
   border: 0;
   border-radius: 6px;
@@ -603,6 +621,26 @@ th {
 .daily-total {
   background: var(--soft-blue);
   font-weight: 900;
+}
+
+.week-divider td {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: var(--navy);
+  color: #fff;
+  font-weight: 900;
+  text-align: left;
+}
+
+.week-total-row td {
+  background: #edf7ff;
+  color: var(--navy);
+  font-weight: 900;
+}
+
+.week-total-row td:nth-child(2) {
+  text-align: left;
 }
 
 .shift-select,
