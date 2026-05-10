@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dgtech foods Oy Shift Planner</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section id="authScreen" class="auth-screen">
+      <div class="auth-card">
+        <div class="brand auth-brand">
+          <div class="brand-mark">D</div>
+          <div>
+            <h1>Dgtech foods Oy</h1>
+            <p>Password protected shift planner</p>
+          </div>
+        </div>
+
+        <form id="setupForm" class="auth-form">
+          <h2>Create first employer ID</h2>
+          <p>This local app needs at least one employer account before employees can be invited.</p>
+          <input id="setupName" type="text" placeholder="Employer name" required />
+          <input id="setupEmail" type="email" placeholder="Email" required />
+          <input id="setupUsername" type="text" placeholder="Username" required />
+          <input id="setupPassword" type="password" placeholder="Password" required />
+          <button class="primary-button" type="submit">Create employer login</button>
+        </form>
+
+        <form id="loginForm" class="auth-form">
+          <h2>Login</h2>
+          <input id="loginUser" type="text" placeholder="Email or username" required />
+          <input id="loginPassword" type="password" placeholder="Password" required />
+          <button class="primary-button" type="submit">Login</button>
+        </form>
+
+        <form id="inviteForm" class="auth-form">
+          <h2>Create your employee login</h2>
+          <p id="inviteText"></p>
+          <input id="inviteName" type="text" placeholder="Full name" disabled />
+          <input id="inviteEmail" type="email" placeholder="Email" required />
+          <input id="inviteUsername" type="text" placeholder="Username" required />
+          <input id="invitePassword" type="password" placeholder="Password" required />
+          <button class="primary-button" type="submit">Confirm and create login</button>
+        </form>
+
+        <p class="auth-note">Passwords and shared planner data are handled by the backend. On Vercel, connect KV storage so everyone sees the same live schedule.</p>
+      </div>
+    </section>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">D</div>
+          <div>
+            <h1>Dgtech foods Oy</h1>
+            <p>Shift planner</p>
+          </div>
+        </div>
+
+        <div class="period-card">
+          <div class="user-box">
+            <span id="userRole">Employer</span>
+            <strong id="userName">Logged in</strong>
+            <button id="logoutButton" class="mini-button" type="button">Logout</button>
+          </div>
+          <label for="yearSelect">Year</label>
+          <select id="yearSelect"></select>
+          <label for="monthSelect">Month</label>
+          <select id="monthSelect"></select>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Views">
+          <button class="nav-tab active" data-view="schedule" type="button">Schedule</button>
+          <button class="nav-tab" data-view="employees" type="button">Employees</button>
+          <button class="nav-tab" data-view="locations" type="button">Restaurants</button>
+          <button class="nav-tab" data-view="weeks" type="button">Weeks</button>
+          <button class="nav-tab" data-view="reports" type="button">PDF Reports</button>
+          <button class="nav-tab" data-view="settings" type="button">Settings</button>
+        </nav>
+
+        <div class="side-actions">
+          <button id="seedMay" class="quiet-button" type="button">Load May sample</button>
+          <button id="blankMonth" class="quiet-button" type="button">Blank month</button>
+          <button id="exportData" class="quiet-button" type="button">Export data</button>
+          <label class="quiet-button file-button">
+            Import data
+            <input id="importData" type="file" accept="application/json" />
+          </label>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h2 id="pageTitle">May 2026 Schedule</h2>
+            <p id="pageMeta">Koivistonkylä and Ylöjärvi</p>
+          </div>
+          <div class="top-actions">
+            <button id="printPage" class="icon-button" title="Print" type="button" aria-label="Print">
+              <span>Print</span>
+            </button>
+            <button id="saveNow" class="primary-button" type="button">Save</button>
+          </div>
+        </header>
+
+        <section class="kpi-row" aria-label="Monthly overview">
+          <article class="kpi-card">
+            <span>Total hours</span>
+            <strong id="kpiTotal">0</strong>
+          </article>
+          <article class="kpi-card">
+            <span>Koivistonkylä</span>
+            <strong id="kpiKoivisto">0</strong>
+          </article>
+          <article class="kpi-card">
+            <span>Ylöjärvi</span>
+            <strong id="kpiYlojarvi">0</strong>
+          </article>
+          <article class="kpi-card">
+            <span>Working shifts</span>
+            <strong id="kpiShifts">0</strong>
+          </article>
+        </section>
+
+        <section id="scheduleView" class="view-panel active">
+          <div class="table-toolbar">
+            <div class="legend">
+              <span class="chip blank">00:00</span>
+              <span class="chip morning">09-14</span>
+              <span class="chip day">09-17</span>
+              <span class="chip afternoon">13-18</span>
+              <span class="chip evening">17-23</span>
+              <span class="chip off">OFF</span>
+            </div>
+            <input id="employeeFilter" class="filter-input" type="search" placeholder="Filter employee" />
+          </div>
+          <div id="scheduleTable" class="schedule-table" role="region" aria-label="Monthly schedule"></div>
+        </section>
+
+        <section id="employeesView" class="view-panel">
+          <div id="employeeSummary" class="summary-grid"></div>
+        </section>
+
+        <section id="locationsView" class="view-panel">
+          <div class="location-layout">
+            <div id="locationSummary" class="summary-grid"></div>
+            <div id="locationRoster" class="roster-list"></div>
+          </div>
+        </section>
+
+        <section id="weeksView" class="view-panel">
+          <div id="weekSummary" class="week-grid"></div>
+        </section>
+
+        <section id="reportsView" class="view-panel">
+          <div class="reports-layout">
+            <section class="report-controls">
+              <h3>PDF report</h3>
+              <label for="reportType">Report type</label>
+              <select id="reportType">
+                <option value="month">Full month</option>
+                <option value="employee">Employee</option>
+                <option value="restaurant">Restaurant</option>
+                <option value="week">One week</option>
+                <option value="threeWeeks">Three weeks</option>
+              </select>
+              <label for="reportEmployee">Employee</label>
+              <select id="reportEmployee"></select>
+              <label for="reportLocation">Restaurant</label>
+              <select id="reportLocation"></select>
+              <label for="reportWeek">Week</label>
+              <select id="reportWeek"></select>
+              <label for="reportThreeWeek">3-week period</label>
+              <select id="reportThreeWeek"></select>
+              <button id="openReport" class="primary-button" type="button">Open PDF / Print view</button>
+            </section>
+            <section class="report-preview">
+              <div id="reportPreview"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="settingsView" class="view-panel">
+          <div class="settings-grid">
+            <section class="settings-section">
+              <h3>Employees</h3>
+              <div id="employeeEditor" class="editor-list"></div>
+              <div class="inline-form">
+                <input id="newEmployee" type="text" placeholder="Employee name" />
+                <button id="addEmployee" type="button">Add</button>
+              </div>
+            </section>
+            <section class="settings-section">
+              <h3>Restaurants</h3>
+              <div id="locationEditor" class="editor-list"></div>
+              <div class="inline-form">
+                <input id="newLocation" type="text" placeholder="Restaurant name" />
+                <button id="addLocation" type="button">Add</button>
+              </div>
+            </section>
+            <section class="settings-section">
+              <h3>Employer IDs</h3>
+              <div id="employerEditor" class="editor-list"></div>
+              <div class="inline-form account-form">
+                <input id="newEmployerName" type="text" placeholder="Name" />
+                <input id="newEmployerEmail" type="email" placeholder="Email" />
+                <input id="newEmployerUsername" type="text" placeholder="Username" />
+                <input id="newEmployerPassword" type="password" placeholder="Password" />
+                <button id="addEmployer" type="button">Add employer</button>
+              </div>
+            </section>
+            <section class="settings-section">
+              <h3>Employee login links</h3>
+              <div id="inviteEditor" class="editor-list"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <datalist id="shiftOptions"></datalist>
+    <script src="./app.js"></script>
+  </body>
+</html>

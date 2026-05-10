@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/shiftplanner-app/",
+      "permanent": false
+    }
+  ]
+}
