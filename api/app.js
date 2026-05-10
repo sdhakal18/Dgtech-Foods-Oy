@@ -31,9 +31,17 @@ function initialState() {
       week: "",
       threeWeek: "1",
     },
+    duplicate: {
+      period: "week",
+      fromBlock: "1",
+      targetYear: 2026,
+      targetMonth: 4,
+      targetBlock: "2",
+    },
     employees: employeesDefault,
     locations: locationsDefault,
     months: {},
+    history: [],
     auth: {
       employers: [],
       employees: [],
@@ -90,6 +98,8 @@ function normalizeStore(value) {
     locations: value?.locations?.length ? value.locations : base.locations,
     months: value?.months ?? {},
     report: { ...base.report, ...(value?.report ?? {}) },
+    duplicate: { ...base.duplicate, ...(value?.duplicate ?? {}) },
+    history: value?.history ?? [],
     auth: {
       employers: value?.auth?.employers ?? [],
       employees: value?.auth?.employees ?? [],
@@ -131,9 +141,11 @@ function publicState(state, user = null, inviteToken = "") {
     role: user?.type ?? state.role,
     activeEmployee: user?.type === "employee" ? user.employeeName : state.activeEmployee,
     report: state.report,
+    duplicate: state.duplicate,
     employees: state.employees,
     locations: state.locations,
     months: state.months,
+    history: state.history,
     auth: {
       employers: state.auth.employers.map(publicAccount),
       employees: state.auth.employees.map(publicAccount),
@@ -257,9 +269,11 @@ module.exports = async function handler(req, res) {
       state.view = next.view;
       state.activeEmployee = next.activeEmployee;
       state.report = next.report;
+      state.duplicate = next.duplicate ?? state.duplicate;
       state.employees = next.employees;
       state.locations = next.locations;
       state.months = next.months;
+      state.history = next.history ?? state.history;
       await writeStore(state);
       return send(res, 200, { ok: true, state: publicState(state, user) });
     }

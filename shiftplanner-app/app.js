@@ -53,6 +53,7 @@ const initialState = {
     targetMonth: 4,
     targetBlock: "2",
   },
+  history: [],
   employees: employeesDefault,
   locations: locationsDefault,
   months: {},
@@ -108,6 +109,7 @@ const el = {
   locationEditor: document.querySelector("#locationEditor"),
   employerEditor: document.querySelector("#employerEditor"),
   inviteEditor: document.querySelector("#inviteEditor"),
+  historyList: document.querySelector("#historyList"),
   newEmployee: document.querySelector("#newEmployee"),
   newLocation: document.querySelector("#newLocation"),
   newEmployerName: document.querySelector("#newEmployerName"),
@@ -171,6 +173,7 @@ function mergeLoadedState(parsed) {
     activeEmployee: parsed.activeEmployee ?? employeesDefault[0],
     report: { ...structuredClone(initialState.report), ...(parsed.report ?? {}) },
     duplicate: { ...structuredClone(initialState.duplicate), ...(parsed.duplicate ?? {}) },
+    history: parsed.history ?? [],
   };
 }
 
@@ -189,6 +192,8 @@ function stateForServer() {
     view: state.view,
     activeEmployee: state.activeEmployee,
     report: state.report,
+    duplicate: state.duplicate,
+    history: state.history,
     employees: state.employees,
     locations: state.locations,
     months: state.months,
@@ -491,21 +496,55 @@ function daysInSpecificMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();
 }
 
+function mondayOnOrBefore(date) {
+  const day = date.getDay() || 7;
+  return addDays(date, 1 - day);
+}
+
+function dateRange(startDate, length) {
+  return Array.from({ length }, (_, index) => addDays(startDate, index));
+}
+
+function formatShortDate(date) {
+  return `${date.getDate()}.${date.getMonth() + 1}`;
+}
+
+function blockTouchesMonth(dates, year, month) {
+  return dates.some((date) => date.getFullYear() === year && date.getMonth() === month);
+}
+
 function duplicateBlocks(period, year, month) {
-  const count = daysInSpecificMonth(year, month);
-  if (period === "month") return [{ label: "Full month", value: "month", days: Array.from({ length: count }, (_, index) => index + 1) }];
-  if (period === "threeWeeks") {
-    return [
-      { label: "Days 1-21", value: "1", days: Array.from({ length: Math.min(21, count) }, (_, index) => index + 1) },
-      { label: `Days 22-${count}`, value: "2", days: count >= 22 ? Array.from({ length: count - 21 }, (_, index) => index + 22) : [] },
-    ].filter((block) => block.days.length);
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month, daysInSpecificMonth(year, month));
+  if (period === "month") {
+    const dates = dateRange(firstDay, daysInSpecificMonth(year, month));
+    return [{ label: "Full month", value: "month", dates }];
   }
+  const blockLength = period === "threeWeeks" ? 21 : 7;
   const blocks = [];
-  for (let start = 1, block = 1; start <= count; start += 7, block += 1) {
-    const end = Math.min(count, start + 6);
-    blocks.push({ label: `Week ${block}: days ${start}-${end}`, value: String(block), days: Array.from({ length: end - start + 1 }, (_, index) => start + index) });
+  for (let start = mondayOnOrBefore(firstDay), block = 1; start <= lastDay; start = addDays(start, blockLength), block += 1) {
+    const dates = dateRange(start, blockLength);
+    if (!blockTouchesMonth(dates, year, month)) continue;
+    const prefix = period === "threeWeeks" ? `3 weeks ${block}` : `Week ${block}`;
+    blocks.push({
+      label: `${prefix}: ${formatShortDate(dates[0])}-${formatShortDate(dates.at(-1))}`,
+      value: dateKey(dates[0]),
+      dates,
+    });
   }
   return blocks;
+}
+
+function logHistory(action) {
+  const user = currentUser();
+  state.history ??= [];
+  state.history.unshift({
+    id: createId("history"),
+    at: new Date().toISOString(),
+    action,
+    user: user?.name || user?.employeeName || "Unknown",
+  });
+  state.history = state.history.slice(0, 40);
 }
 
 function getStats(options = {}) {
@@ -800,6 +839,7 @@ function renderWeeks() {
 
 function renderSettings() {
   renderDuplicateControls();
+  renderHistory();
   el.employeeEditor.innerHTML = state.employees
     .map(
       (name) => `
@@ -853,6 +893,19 @@ function renderSettings() {
       `;
     })
     .join("");
+}
+
+function renderHistory() {
+  if (!el.historyList) return;
+  const rows = (state.history ?? []).slice(0, 12);
+  el.historyList.innerHTML =
+    rows
+      .map((item) => {
+        const date = new Date(item.at);
+        const stamp = Number.isNaN(date.getTime()) ? "" : date.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" });
+        return `<div class="history-row"><span>${esc(stamp)}</span><strong>${esc(item.action)}</strong><em>${esc(item.user)}</em></div>`;
+      })
+      .join("") || `<p class="empty-note">No saved history yet.</p>`;
 }
 
 function renderDuplicateControls() {
@@ -1088,6 +1141,7 @@ function seedMaySample() {
     });
   }
   state.months[monthKey(2026, 4)] = data;
+  logHistory("Loaded May sample");
   saveState(true);
   render();
 }
@@ -1102,8 +1156,15 @@ function blankMonth() {
     }
   }
   state.months[monthKey()] = data;
+  logHistory(`Blanked ${monthNames[state.month]} ${state.year}`);
   saveState(true);
   render();
+}
+
+function manualSave() {
+  if (isEmployer()) logHistory(`Saved ${monthNames[state.month]} ${state.year}`);
+  saveState(true);
+  renderSettings();
 }
 
 function duplicateShifts() {
@@ -1119,18 +1180,19 @@ function duplicateShifts() {
     toast("Choose source and target period");
     return;
   }
-  const sourceData = ensureMonth(state.year, state.month);
-  const targetData = ensureMonth(targetYear, targetMonth);
-  const copyLength = Math.min(sourceBlock.days.length, targetBlock.days.length);
+  const copyLength = Math.min(sourceBlock.dates.length, targetBlock.dates.length);
   for (let index = 0; index < copyLength; index += 1) {
-    const sourceDay = sourceBlock.days[index];
-    const targetDay = targetBlock.days[index];
+    const sourceDate = sourceBlock.dates[index];
+    const targetDate = targetBlock.dates[index];
+    const sourceDayData = dataForDate(sourceDate);
+    const targetData = ensureMonth(targetDate.getFullYear(), targetDate.getMonth());
+    const targetDay = targetDate.getDate();
     targetData[targetDay] ??= {};
     for (const employee of state.employees) {
-      const sourceEntry = sourceData[sourceDay]?.[employee] ?? { shift: "00:00-00:00", location: state.locations[0] ?? "" };
-      targetData[targetDay][employee] = { shift: sourceEntry.shift, location: sourceEntry.location };
+      targetData[targetDay][employee] = copyEntry(sourceDayData?.[employee]);
     }
   }
+  logHistory(`Duplicated ${duplicate.period} to ${monthNames[targetMonth]} ${targetYear}`);
   state.year = targetYear;
   state.month = targetMonth;
   saveState(true);
@@ -1154,18 +1216,22 @@ function copyEntry(entry) {
 
 function duplicateRecentDays(dayCount, label) {
   if (!isEmployer()) return;
-  const targetData = ensureMonth(state.year, state.month);
-  const targetLength = Math.min(dayCount, daysInMonth());
-  const sourceStart = new Date(state.year, state.month, 1 - dayCount);
-  for (let offset = 0; offset < targetLength; offset += 1) {
+  const period = dayCount === 21 ? "threeWeeks" : "week";
+  const targetBlock = duplicateBlocks(period, state.year, state.month)[0];
+  const targetDates = targetBlock?.dates ?? dateRange(new Date(state.year, state.month, 1), Math.min(dayCount, daysInMonth()));
+  const sourceStart = addDays(targetDates[0], -dayCount);
+  for (let offset = 0; offset < targetDates.length; offset += 1) {
     const sourceDate = addDays(sourceStart, offset);
-    const targetDay = offset + 1;
+    const targetDate = targetDates[offset];
+    const targetData = ensureMonth(targetDate.getFullYear(), targetDate.getMonth());
+    const targetDay = targetDate.getDate();
     targetData[targetDay] ??= {};
     const sourceDayData = dataForDate(sourceDate);
     for (const employee of state.employees) {
       targetData[targetDay][employee] = copyEntry(sourceDayData?.[employee]);
     }
   }
+  logHistory(`Copied ${label} into current ${period === "week" ? "week" : "3-week period"}`);
   saveState(true);
   render();
   toast(`Copied ${label}`);
@@ -1183,6 +1249,7 @@ function duplicateLastMonth() {
       targetData[day][employee] = copyEntry(sourceData[day]?.[employee]);
     }
   }
+  logHistory(`Copied last month into ${monthNames[state.month]} ${state.year}`);
   saveState(true);
   render();
   toast("Copied last month");
@@ -1665,7 +1732,7 @@ document.addEventListener("click", (event) => {
   }
 });
 
-document.querySelector("#saveNow").addEventListener("click", () => saveState(true));
+document.querySelector("#saveNow").addEventListener("click", manualSave);
 document.querySelector("#printPage").addEventListener("click", () => window.print());
 document.querySelector("#seedMay").addEventListener("click", seedMaySample);
 document.querySelector("#blankMonth").addEventListener("click", blankMonth);
