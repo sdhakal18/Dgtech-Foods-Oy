@@ -214,6 +214,36 @@
               <h3>Employee login links</h3>
               <div id="inviteEditor" class="editor-list"></div>
             </section>
+            <section class="settings-section settings-wide">
+              <h3>Duplicate shifts</h3>
+              <div class="duplicate-controls">
+                <label>
+                  Copy
+                  <select id="duplicatePeriod">
+                    <option value="week">Week</option>
+                    <option value="threeWeeks">3 weeks</option>
+                    <option value="month">Full month</option>
+                  </select>
+                </label>
+                <label>
+                  From current month
+                  <select id="duplicateFromBlock"></select>
+                </label>
+                <label>
+                  To year
+                  <select id="duplicateYear"></select>
+                </label>
+                <label>
+                  To month
+                  <select id="duplicateMonth"></select>
+                </label>
+                <label>
+                  To period
+                  <select id="duplicateToBlock"></select>
+                </label>
+                <button id="duplicateShifts" class="primary-button" type="button">Duplicate shifts</button>
+              </div>
+            </section>
           </div>
         </section>
       </main>

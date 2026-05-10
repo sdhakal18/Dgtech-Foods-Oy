@@ -46,6 +46,13 @@ const initialState = {
     week: "",
     threeWeek: "1",
   },
+  duplicate: {
+    period: "week",
+    fromBlock: "1",
+    targetYear: 2026,
+    targetMonth: 4,
+    targetBlock: "2",
+  },
   employees: employeesDefault,
   locations: locationsDefault,
   months: {},
@@ -104,6 +111,12 @@ const el = {
   newEmployerEmail: document.querySelector("#newEmployerEmail"),
   newEmployerUsername: document.querySelector("#newEmployerUsername"),
   newEmployerPassword: document.querySelector("#newEmployerPassword"),
+  duplicatePeriod: document.querySelector("#duplicatePeriod"),
+  duplicateFromBlock: document.querySelector("#duplicateFromBlock"),
+  duplicateYear: document.querySelector("#duplicateYear"),
+  duplicateMonth: document.querySelector("#duplicateMonth"),
+  duplicateToBlock: document.querySelector("#duplicateToBlock"),
+  duplicateShifts: document.querySelector("#duplicateShifts"),
   toast: document.querySelector("#toast"),
 };
 
@@ -154,6 +167,7 @@ function mergeLoadedState(parsed) {
     role: parsed.role === "employee" ? "employee" : "employer",
     activeEmployee: parsed.activeEmployee ?? employeesDefault[0],
     report: { ...structuredClone(initialState.report), ...(parsed.report ?? {}) },
+    duplicate: { ...structuredClone(initialState.duplicate), ...(parsed.duplicate ?? {}) },
   };
 }
 
@@ -470,6 +484,27 @@ function daysForPeriod(period = "month", value = "") {
   return allDays;
 }
 
+function daysInSpecificMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function duplicateBlocks(period, year, month) {
+  const count = daysInSpecificMonth(year, month);
+  if (period === "month") return [{ label: "Full month", value: "month", days: Array.from({ length: count }, (_, index) => index + 1) }];
+  if (period === "threeWeeks") {
+    return [
+      { label: "Days 1-21", value: "1", days: Array.from({ length: Math.min(21, count) }, (_, index) => index + 1) },
+      { label: `Days 22-${count}`, value: "2", days: count >= 22 ? Array.from({ length: count - 21 }, (_, index) => index + 22) : [] },
+    ].filter((block) => block.days.length);
+  }
+  const blocks = [];
+  for (let start = 1, block = 1; start <= count; start += 7, block += 1) {
+    const end = Math.min(count, start + 6);
+    blocks.push({ label: `Week ${block}: days ${start}-${end}`, value: String(block), days: Array.from({ length: end - start + 1 }, (_, index) => start + index) });
+  }
+  return blocks;
+}
+
 function getStats(options = {}) {
   normalizeMonthData();
   const data = ensureMonth();
@@ -761,6 +796,7 @@ function renderWeeks() {
 }
 
 function renderSettings() {
+  renderDuplicateControls();
   el.employeeEditor.innerHTML = state.employees
     .map(
       (name) => `
@@ -814,6 +850,37 @@ function renderSettings() {
       `;
     })
     .join("");
+}
+
+function renderDuplicateControls() {
+  if (!el.duplicatePeriod) return;
+  const duplicate = state.duplicate;
+  duplicate.targetYear = Number(duplicate.targetYear || state.year);
+  duplicate.targetMonth = Number.isFinite(Number(duplicate.targetMonth)) ? Number(duplicate.targetMonth) : state.month;
+
+  el.duplicatePeriod.value = duplicate.period;
+  el.duplicateYear.innerHTML = "";
+  for (let year = 2026; year <= 2030; year += 1) {
+    const option = new Option(year, year);
+    option.selected = year === Number(duplicate.targetYear);
+    el.duplicateYear.append(option);
+  }
+  el.duplicateMonth.innerHTML = "";
+  monthNames.forEach((name, index) => {
+    const option = new Option(name, index);
+    option.selected = index === Number(duplicate.targetMonth);
+    el.duplicateMonth.append(option);
+  });
+
+  const fromBlocks = duplicateBlocks(duplicate.period, state.year, state.month);
+  const toBlocks = duplicateBlocks(duplicate.period, Number(duplicate.targetYear), Number(duplicate.targetMonth));
+  if (!fromBlocks.some((block) => block.value === duplicate.fromBlock)) duplicate.fromBlock = fromBlocks[0]?.value ?? "";
+  if (!toBlocks.some((block) => block.value === duplicate.targetBlock)) duplicate.targetBlock = toBlocks[0]?.value ?? "";
+
+  el.duplicateFromBlock.innerHTML = fromBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === duplicate.fromBlock ? "selected" : ""}>${esc(block.label)}</option>`).join("");
+  el.duplicateToBlock.innerHTML = toBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === duplicate.targetBlock ? "selected" : ""}>${esc(block.label)}</option>`).join("");
+  el.duplicateFromBlock.disabled = duplicate.period === "month";
+  el.duplicateToBlock.disabled = duplicate.period === "month";
 }
 
 function getReportConfig() {
@@ -1030,6 +1097,38 @@ function blankMonth() {
   state.months[monthKey()] = data;
   saveState(true);
   render();
+}
+
+function duplicateShifts() {
+  if (!isEmployer()) return;
+  const duplicate = state.duplicate;
+  const sourceBlocks = duplicateBlocks(duplicate.period, state.year, state.month);
+  const targetYear = Number(duplicate.targetYear);
+  const targetMonth = Number(duplicate.targetMonth);
+  const targetBlocks = duplicateBlocks(duplicate.period, targetYear, targetMonth);
+  const sourceBlock = sourceBlocks.find((block) => block.value === duplicate.fromBlock) ?? sourceBlocks[0];
+  const targetBlock = targetBlocks.find((block) => block.value === duplicate.targetBlock) ?? targetBlocks[0];
+  if (!sourceBlock || !targetBlock) {
+    toast("Choose source and target period");
+    return;
+  }
+  const sourceData = ensureMonth(state.year, state.month);
+  const targetData = ensureMonth(targetYear, targetMonth);
+  const copyLength = Math.min(sourceBlock.days.length, targetBlock.days.length);
+  for (let index = 0; index < copyLength; index += 1) {
+    const sourceDay = sourceBlock.days[index];
+    const targetDay = targetBlock.days[index];
+    targetData[targetDay] ??= {};
+    for (const employee of state.employees) {
+      const sourceEntry = sourceData[sourceDay]?.[employee] ?? { shift: "00:00-00:00", location: state.locations[0] ?? "" };
+      targetData[targetDay][employee] = { shift: sourceEntry.shift, location: sourceEntry.location };
+    }
+  }
+  state.year = targetYear;
+  state.month = targetMonth;
+  saveState(true);
+  render();
+  toast(`Duplicated ${copyLength} days`);
 }
 
 function addEmployee() {
@@ -1388,6 +1487,16 @@ document.addEventListener("change", (event) => {
     render();
     return;
   }
+  if ([el.duplicatePeriod, el.duplicateFromBlock, el.duplicateYear, el.duplicateMonth, el.duplicateToBlock].includes(event.target)) {
+    state.duplicate.period = el.duplicatePeriod.value;
+    state.duplicate.fromBlock = el.duplicateFromBlock.value;
+    state.duplicate.targetYear = Number(el.duplicateYear.value);
+    state.duplicate.targetMonth = Number(el.duplicateMonth.value);
+    state.duplicate.targetBlock = el.duplicateToBlock.value;
+    saveState();
+    renderSettings();
+    return;
+  }
   if (event.target.matches("[data-field]")) {
     updateEntry(event.target);
     return;
@@ -1508,6 +1617,7 @@ document.querySelector("#addEmployee").addEventListener("click", addEmployee);
 document.querySelector("#addLocation").addEventListener("click", addLocation);
 document.querySelector("#addEmployer").addEventListener("click", addEmployer);
 document.querySelector("#openReport").addEventListener("click", openReportWindow);
+el.duplicateShifts.addEventListener("click", duplicateShifts);
 el.setupForm.addEventListener("submit", createFirstEmployer);
 el.loginForm.addEventListener("submit", login);
 el.inviteForm.addEventListener("submit", createEmployeeLogin);
