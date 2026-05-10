@@ -264,6 +264,7 @@ input {
 .employee-mode #blankMonth,
 .employee-mode #exportData,
 .employee-mode #saveNow,
+.employee-mode .schedule-duplicate,
 .employee-mode .file-button {
   display: none;
 }
@@ -387,6 +388,40 @@ input {
   align-items: center;
   gap: 16px;
   margin-bottom: 12px;
+}
+
+.schedule-duplicate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.schedule-duplicate span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.schedule-duplicate button {
+  border: 0;
+  border-radius: 6px;
+  background: var(--soft-blue);
+  color: var(--navy);
+  cursor: pointer;
+  font-weight: 800;
+  padding: 8px 10px;
+}
+
+.schedule-duplicate button:hover {
+  background: var(--blue);
+  color: #fff;
 }
 
 .legend {
@@ -1092,13 +1127,18 @@ th {
   }
 
   .topbar,
-  .table-toolbar {
+  .table-toolbar,
+  .schedule-duplicate {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .filter-input {
     max-width: none;
+  }
+
+  .schedule-duplicate button {
+    width: 100%;
   }
 
   .topbar h2 {

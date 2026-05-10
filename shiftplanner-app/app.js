@@ -101,6 +101,9 @@ const el = {
   reportThreeWeek: document.querySelector("#reportThreeWeek"),
   reportPreview: document.querySelector("#reportPreview"),
   employeeFilter: document.querySelector("#employeeFilter"),
+  copyLastWeek: document.querySelector("#copyLastWeek"),
+  copyLastThreeWeeks: document.querySelector("#copyLastThreeWeeks"),
+  copyLastMonth: document.querySelector("#copyLastMonth"),
   employeeEditor: document.querySelector("#employeeEditor"),
   locationEditor: document.querySelector("#locationEditor"),
   employerEditor: document.querySelector("#employerEditor"),
@@ -1131,6 +1134,56 @@ function duplicateShifts() {
   toast(`Duplicated ${copyLength} days`);
 }
 
+function monthBefore(year = state.year, month = state.month) {
+  const date = new Date(year, month - 1, 1);
+  return { year: date.getFullYear(), month: date.getMonth() };
+}
+
+function dataForDate(date) {
+  const monthData = ensureMonth(date.getFullYear(), date.getMonth());
+  return monthData[date.getDate()];
+}
+
+function copyEntry(entry) {
+  return { shift: entry?.shift || "00:00-00:00", location: entry?.location || state.locations[0] || "" };
+}
+
+function duplicateRecentDays(dayCount, label) {
+  if (!isEmployer()) return;
+  const targetData = ensureMonth(state.year, state.month);
+  const targetLength = Math.min(dayCount, daysInMonth());
+  const sourceStart = new Date(state.year, state.month, 1 - dayCount);
+  for (let offset = 0; offset < targetLength; offset += 1) {
+    const sourceDate = addDays(sourceStart, offset);
+    const targetDay = offset + 1;
+    targetData[targetDay] ??= {};
+    const sourceDayData = dataForDate(sourceDate);
+    for (const employee of state.employees) {
+      targetData[targetDay][employee] = copyEntry(sourceDayData?.[employee]);
+    }
+  }
+  saveState(true);
+  render();
+  toast(`Copied ${label}`);
+}
+
+function duplicateLastMonth() {
+  if (!isEmployer()) return;
+  const previous = monthBefore();
+  const sourceData = ensureMonth(previous.year, previous.month);
+  const targetData = ensureMonth(state.year, state.month);
+  const copyLength = Math.min(daysInSpecificMonth(previous.year, previous.month), daysInMonth());
+  for (let day = 1; day <= copyLength; day += 1) {
+    targetData[day] ??= {};
+    for (const employee of state.employees) {
+      targetData[day][employee] = copyEntry(sourceData[day]?.[employee]);
+    }
+  }
+  saveState(true);
+  render();
+  toast("Copied last month");
+}
+
 function addEmployee() {
   if (!isEmployer()) return;
   const name = el.newEmployee.value.trim();
@@ -1617,6 +1670,9 @@ document.querySelector("#addEmployee").addEventListener("click", addEmployee);
 document.querySelector("#addLocation").addEventListener("click", addLocation);
 document.querySelector("#addEmployer").addEventListener("click", addEmployer);
 document.querySelector("#openReport").addEventListener("click", openReportWindow);
+el.copyLastWeek.addEventListener("click", () => duplicateRecentDays(7, "last week"));
+el.copyLastThreeWeeks.addEventListener("click", () => duplicateRecentDays(21, "last 3 weeks"));
+el.copyLastMonth.addEventListener("click", duplicateLastMonth);
 el.duplicateShifts.addEventListener("click", duplicateShifts);
 el.setupForm.addEventListener("submit", createFirstEmployer);
 el.loginForm.addEventListener("submit", login);
