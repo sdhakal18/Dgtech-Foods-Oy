@@ -984,6 +984,10 @@ function buildReportHtml(config = getReportConfig()) {
         <thead><tr><th>Employee</th>${state.locations.map((loc) => `<th>${esc(loc)}</th>`).join("")}<th>Total</th><th>Days</th></tr></thead>
         <tbody>${employeeRows || `<tr><td colspan="${state.locations.length + 3}">No employees with worked shifts.</td></tr>`}</tbody>
       </table>
+      <footer class="report-footer">
+        <p>© 2026 Dgtech foods oy. All Rights Reserved.</p>
+        <p>Developed by Dgtech Oy</p>
+      </footer>
     </article>
   `;
 }

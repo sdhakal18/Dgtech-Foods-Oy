@@ -306,6 +306,19 @@ input {
   padding: 24px;
 }
 
+.app-footer {
+  margin-top: 18px;
+  padding: 16px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.app-footer p,
+.report-footer p {
+  margin: 2px 0;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -839,6 +852,15 @@ th {
 
 .print-report .report-red-day td {
   border-color: #e14b5a;
+}
+
+.report-footer {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 2px solid var(--navy);
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
 }
 
 .print-body {
