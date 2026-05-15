@@ -659,7 +659,10 @@ function getStats(options = {}) {
 }
 
 function renderSelectors() {
-  document.querySelector("#shiftOptions").innerHTML = shifts.map((shift) => `<option value="${shift}"></option>`).join("");
+  document.querySelector("#shiftOptions").innerHTML = shifts
+    .filter((shift) => shift !== "00:00-00:00")
+    .map((shift) => `<option value="${shift}"></option>`)
+    .join("");
 
   el.yearSelect.innerHTML = "";
   for (let year = 2026; year <= 2030; year += 1) {
@@ -886,19 +889,14 @@ function formatDuration(hours) {
 
 function scheduleCell(day, employee, entry) {
   const visible = canSeeEntry(employee, entry) || employee === state.activeEmployee;
-  if (!visible) return `<div class="schedule-cell muted-cell">Unpublished</div>`;
-  const tools = isEmployer()
-    ? `<span class="published-badge ${entry.published ? "" : "draft"}">${entry.published ? "Published" : "Unpublished"}</span>`
-    : entry.published
-      ? `<span class="published-badge">Published</span>`
-      : `<span class="published-badge draft">Unpublished</span>`;
+  if (!visible) return `<div class="schedule-cell muted-cell"></div>`;
   const sickPaid = entry.shift === "Sick leave" && hoursForEntry(entry) > 0 ? `<span class="paid-shift">Published hours: ${formatDuration(hoursForEntry(entry))}</span>` : "";
   return `
     <div class="schedule-cell ${entry.published ? "published-cell" : "draft-cell"}">
       ${shiftSelect(day, employee, entry)}
       ${locationSelect(day, employee, entry)}
       ${commentInput(day, employee, entry)}
-      <div class="cell-tools">${tools}${sickPaid}</div>
+      ${sickPaid ? `<div class="cell-tools">${sickPaid}</div>` : ""}
     </div>
   `;
 }
