@@ -14,23 +14,25 @@ const shifts = [
   "00:00-00:00",
   "07:00-15:00",
   "08:45-20:00",
-  "09:00-14:00",
+  "09:00-15:00",
+  "09:00-15:30",
   "09:00-16:00",
-  "09:00-17:00",
-  "09:00-18:30",
-  "09:00-19:00",
   "09:00-19:30",
   "09:00-20:00",
   "09:00-20:30",
   "10:00-18:30",
   "10:00-19:00",
   "11:00-20:00",
-  "13:00-18:00",
+  "12:00-20:00",
+  "13:00-20:00",
+  "13:00-20:30",
   "14:00-19:00",
   "14:00-19:30",
+  "14:00-20:30",
   "14:00-21:00",
+  "14:30-19:30",
+  "15:00-19:30",
   "15:00-20:30",
-  "17:00-23:00",
   "OFF",
   "Wish OFF",
   "Sick leave",
@@ -400,7 +402,7 @@ function normalizeShift(value) {
 function isValidShift(value) {
   const normalized = normalizeShift(value);
   if (normalized === "" || nonWorkingShifts.includes(normalized)) return true;
-  return /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(normalized);
+  return shifts.includes(normalized);
 }
 
 function hoursForEntry(entry) {
@@ -886,11 +888,11 @@ function scheduleCell(day, employee, entry) {
   const visible = canSeeEntry(employee, entry) || employee === state.activeEmployee;
   if (!visible) return `<div class="schedule-cell muted-cell">Unpublished</div>`;
   const tools = isEmployer()
-    ? `<button class="publish-button ${entry.published ? "published" : ""}" type="button" data-publish-day="${day}" data-publish-employee="${encodeURIComponent(employee)}">${entry.published ? "Published" : "Publish"}</button>`
+    ? `<span class="published-badge ${entry.published ? "" : "draft"}">${entry.published ? "Published" : "Unpublished"}</span>`
     : entry.published
       ? `<span class="published-badge">Published</span>`
       : `<span class="published-badge draft">Unpublished</span>`;
-  const sickPaid = entry.shift === "Sick leave" && hoursForEntry(entry) > 0 ? `<span class="paid-shift">Paid: ${esc(entry.paidShift || entry.publishedShift)}</span>` : "";
+  const sickPaid = entry.shift === "Sick leave" && hoursForEntry(entry) > 0 ? `<span class="paid-shift">Published hours: ${formatDuration(hoursForEntry(entry))}</span>` : "";
   return `
     <div class="schedule-cell ${entry.published ? "published-cell" : "draft-cell"}">
       ${shiftSelect(day, employee, entry)}
@@ -1361,7 +1363,7 @@ function updateEntry(target) {
     }
     if (!isValidShift(nextValue)) {
       target.classList.add("invalid");
-      toast("Use HH:MM-HH:MM, OFF, Wish OFF, or Sick leave");
+      toast("Choose a May shift option, OFF, Wish OFF, or Sick leave");
       return;
     }
     if (nextValue === "Sick leave" && entry.shift !== "Sick leave") {
@@ -1404,39 +1406,35 @@ function saveEmployeeWishRequest(day, employee) {
   toast("Wish OFF requested");
 }
 
-function togglePublish(day, employee) {
+function publishPeriod(period, targetValue = "") {
   if (!isEmployer()) return;
-  const entry = ensureMonth()[day]?.[employee];
-  if (!entry) return;
-  entry.published = !entry.published;
-  entry.publishedShift = entry.published ? entry.shift : "";
-  if (entry.shift === "Sick leave" && entry.published && !entry.paidShift) entry.paidShift = entry.publishedShift;
-  saveState(true);
-  render();
-}
-
-function publishVisibleMonth() {
-  if (!isEmployer()) return;
-  const data = ensureMonth();
-  for (let day = 1; day <= daysInMonth(); day += 1) {
+  const blocks = duplicateBlocks(period, state.year, state.month);
+  const dates = period === "month" ? dateRange(new Date(state.year, state.month, 1), daysInMonth()) : (blocks.find((block) => block.value === targetValue) ?? blocks[0])?.dates ?? [];
+  const publishedDays = new Set();
+  for (const date of dates) {
+    if (date.getFullYear() !== state.year || date.getMonth() !== state.month) continue;
+    const day = date.getDate();
+    publishedDays.add(day);
     for (const employee of state.employees) {
-      const entry = data[day]?.[employee];
+      const entry = ensureMonth()[day]?.[employee];
       if (!entry) continue;
       entry.published = true;
       entry.publishedShift = entry.shift;
       if (entry.shift === "Sick leave" && !entry.paidShift) entry.paidShift = entry.publishedShift;
     }
   }
-  logHistory(`Published ${monthNames[state.month]} ${state.year}`);
+  const label = period === "month" ? "month" : period === "threeWeeks" ? "3 weeks" : "week";
+  logHistory(`Published ${label} in ${monthNames[state.month]} ${state.year}`);
   saveState(true);
   render();
-  toast("Month published to employees");
+  toast(`Published ${publishedDays.size} days to employees`);
 }
 
 function publishButtonState() {
-  const button = document.querySelector("#publishMonth");
-  if (!button) return;
-  button.hidden = !isEmployer();
+  ["#publishWeek", "#publishThreeWeeks", "#publishMonth"].forEach((selector) => {
+    const button = document.querySelector(selector);
+    if (button) button.hidden = !isEmployer();
+  });
 }
 
 function seedMaySample() {
@@ -2269,7 +2267,7 @@ document.addEventListener("input", (event) => {
     event.target.classList.toggle("invalid", !valid);
     const normalized = normalizeShift(event.target.value);
     const canLiveSave = isEmployer() || ["Wish OFF", "00:00-00:00"].includes(normalized);
-    if (valid && canLiveSave && (nonWorkingShifts.includes(normalized) || /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(normalized))) {
+    if (valid && canLiveSave && (nonWorkingShifts.includes(normalized) || shifts.includes(normalized))) {
       if (normalized === "Sick leave" && entry.shift !== "Sick leave") {
         entry.paidShift = entry.publishedShift || (hoursFromShift(entry.shift) > 0 ? entry.shift : "");
       }
@@ -2296,13 +2294,6 @@ document.addEventListener("focusout", (event) => {
 
 document.addEventListener("click", (event) => {
   if (!currentUser()) return;
-
-  const publishButton = event.target.closest("[data-publish-day]");
-  if (publishButton) {
-    const employee = decodeURIComponent(publishButton.dataset.publishEmployee);
-    togglePublish(publishButton.dataset.publishDay, employee);
-    return;
-  }
 
   const requestButton = event.target.closest("[data-request-day]");
   if (requestButton) {
@@ -2399,7 +2390,9 @@ document.querySelector("#openReport").addEventListener("click", openReportWindow
 el.copyLastWeek.addEventListener("click", () => duplicateRecentDays(7, "last week", state.quickDuplicate.targetWeek));
 el.copyLastThreeWeeks.addEventListener("click", () => duplicateRecentDays(21, "last 3 weeks", state.quickDuplicate.targetThreeWeeks));
 el.copyLastMonth.addEventListener("click", duplicateLastMonth);
-document.querySelector("#publishMonth").addEventListener("click", publishVisibleMonth);
+document.querySelector("#publishWeek").addEventListener("click", () => publishPeriod("week", state.quickDuplicate.targetWeek));
+document.querySelector("#publishThreeWeeks").addEventListener("click", () => publishPeriod("threeWeeks", state.quickDuplicate.targetThreeWeeks));
+document.querySelector("#publishMonth").addEventListener("click", () => publishPeriod("month"));
 el.duplicateShifts.addEventListener("click", duplicateShifts);
 el.setupForm.addEventListener("submit", createFirstEmployer);
 el.loginForm.addEventListener("submit", login);
