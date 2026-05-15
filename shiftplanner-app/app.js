@@ -1887,6 +1887,14 @@ function normalizeCell(value) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function normalizedLetters(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
 function normalizeImportedEmployee(value) {
   const clean = String(value ?? "").trim();
   if (!clean || /date|day|total|shift/i.test(clean)) return "";
@@ -1897,9 +1905,14 @@ function firstNameKey(value) {
   return normalizeCell(value).split(/\s+/)[0];
 }
 
+function employeeInitialKey(value, length = 4) {
+  return normalizedLetters(firstNameKey(value)).slice(0, length);
+}
+
 function findOrCreateImportedEmployee(name) {
   const key = firstNameKey(name);
-  const existing = state.employees.find((employee) => firstNameKey(employee) === key);
+  const initialKey = employeeInitialKey(name);
+  const existing = state.employees.find((employee) => firstNameKey(employee) === key || employeeInitialKey(employee) === initialKey);
   if (existing) return existing;
   state.employees.push(name);
   for (const month of Object.values(state.months)) {
@@ -1916,7 +1929,7 @@ function parseImportedShift(value) {
   if (/sick/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "Sick leave", location: "Koivistonkylä" };
   if (/wish/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "Wish OFF", location: "Koivistonkylä" };
   if (/off/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "OFF", location: "Koivistonkylä" };
-  const location = isYloLocation(raw) ? "Ylöjärvi" : "Koivistonkylä";
+  const location = importedLocation(raw);
   if (!state.locations.includes(location)) state.locations.push(location);
   const match = raw.match(/(\d{1,2})(?::?(\d{2}))?\s*[-–—]\s*(\d{1,2})(?::?(\d{2}))?/);
   if (!match) {
@@ -1935,11 +1948,15 @@ function parseImportedShift(value) {
 }
 
 function isYloLocation(value) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .includes("ylo");
+  return normalizedLetters(value).includes("ylo");
+}
+
+function importedLocation(value) {
+  const letters = normalizedLetters(value);
+  if (letters.includes("ylo") || letters.includes("ylojarvi")) return "Ylöjärvi";
+  if (letters.includes("koi") || letters.includes("koiviston") || letters.includes("koivisto")) return "Koivistonkylä";
+  const match = state.locations.find((location) => letters.includes(normalizedLetters(location).slice(0, 3)));
+  return match || "Koivistonkylä";
 }
 
 function excelDate(value, fallbackYear = state.year, fallbackMonth = state.month) {
