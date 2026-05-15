@@ -1491,26 +1491,221 @@ function exportData() {
   URL.revokeObjectURL(url);
 }
 
-function importData(file) {
+async function importData(file) {
   if (!isEmployer()) return;
-  const reader = new FileReader();
-  reader.onload = () => {
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".xlsx")) {
     try {
-      const imported = JSON.parse(reader.result);
-      state = {
-        ...structuredClone(initialState),
-        ...imported,
-        employees: imported.employees?.length ? imported.employees : employeesDefault,
-        locations: imported.locations?.length ? imported.locations : locationsDefault,
-        months: imported.months ?? {},
-      };
+      const result = await importExcelSchedule(file);
+      logHistory(`Imported Excel ${file.name}`);
       saveState(true);
       render();
-    } catch {
-      toast("Could not import file");
+      toast(`Imported ${result.shifts} shifts`);
+    } catch (error) {
+      toast(error.message || "Could not import Excel");
     }
-  };
-  reader.readAsText(file);
+    return;
+  }
+  try {
+    const imported = JSON.parse(await file.text());
+    state = mergeLoadedState(imported);
+    logHistory(`Imported JSON ${file.name}`);
+    saveState(true);
+    render();
+  } catch {
+    toast("Could not import file");
+  }
+}
+
+async function importExcelSchedule(file) {
+  const entries = await unzipXlsx(await file.arrayBuffer());
+  const sharedStrings = parseSharedStrings(textFromEntry(entries, "xl/sharedStrings.xml"));
+  const sheetNames = parseWorkbookSheets(textFromEntry(entries, "xl/workbook.xml"));
+  const sheetPath = sheetNames.find((sheet) => /schedule|shift|sheet1/i.test(sheet.name))?.path || "xl/worksheets/sheet1.xml";
+  const rows = parseSheetRows(textFromEntry(entries, sheetPath), sharedStrings);
+  const importedEmployees = new Set();
+  let shiftsImported = 0;
+  let activeNames = [];
+  let activeCols = [];
+
+  for (const row of rows) {
+    const dateIndex = row.findIndex((value) => normalizeCell(value) === "dates");
+    if (dateIndex >= 0) {
+      activeNames = [];
+      activeCols = [];
+      for (let col = dateIndex + 1; col < row.length; col += 1) {
+        const name = normalizeImportedEmployee(row[col]);
+        if (!name) continue;
+        const employee = findOrCreateImportedEmployee(name);
+        activeNames.push(employee);
+        activeCols.push(col);
+        importedEmployees.add(employee);
+      }
+      continue;
+    }
+
+    const date = excelDate(row[activeCols.length ? activeCols[0] - 1 : 2]);
+    if (!date || !activeNames.length) continue;
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    if (year < 2026 || year > 2030) continue;
+    const monthData = ensureMonth(year, month);
+    const day = date.getDate();
+    monthData[day] ??= {};
+    for (let index = 0; index < activeCols.length; index += 1) {
+      const employee = activeNames[index];
+      const parsed = parseImportedShift(row[activeCols[index]]);
+      if (!parsed) continue;
+      monthData[day][employee] = parsed;
+      shiftsImported += parsed.shift === "00:00-00:00" ? 0 : 1;
+    }
+    state.year = year;
+    state.month = month;
+  }
+  if (!shiftsImported && !importedEmployees.size) throw new Error("No readable Excel shifts found");
+  return { shifts: shiftsImported, employees: importedEmployees.size };
+}
+
+function normalizeCell(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeImportedEmployee(value) {
+  const clean = String(value ?? "").trim();
+  if (!clean || /date|day|total|shift/i.test(clean)) return "";
+  return clean.replace(/\s+/g, " ");
+}
+
+function firstNameKey(value) {
+  return normalizeCell(value).split(/\s+/)[0];
+}
+
+function findOrCreateImportedEmployee(name) {
+  const key = firstNameKey(name);
+  const existing = state.employees.find((employee) => firstNameKey(employee) === key);
+  if (existing) return existing;
+  state.employees.push(name);
+  for (const month of Object.values(state.months)) {
+    for (const day of Object.values(month)) {
+      day[name] = { shift: "00:00-00:00", location: state.locations[0] ?? "" };
+    }
+  }
+  return name;
+}
+
+function parseImportedShift(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return { shift: "00:00-00:00", location: "Koivistonkylä" };
+  if (/wish|off/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "OFF", location: "Koivistonkylä" };
+  const location = /ylo|ylö/i.test(raw) ? "Ylöjärvi" : "Koivistonkylä";
+  if (!state.locations.includes(location)) state.locations.push(location);
+  const match = raw.match(/(\d{1,2})(?::?(\d{2}))?\s*[-–—]\s*(\d{1,2})(?::?(\d{2}))?/);
+  if (!match) {
+    if (/off|wish/i.test(raw)) return { shift: "OFF", location };
+    return null;
+  }
+  const startHour = match[1].padStart(2, "0");
+  const startMinute = match[2] ?? "00";
+  const endHour = match[3].padStart(2, "0");
+  const endMinute = match[4] ?? "00";
+  const shift = `${startHour}:${startMinute}-${endHour}:${endMinute}`;
+  if (!isValidShift(shift)) return null;
+  return { shift, location };
+}
+
+function excelDate(value) {
+  if (value instanceof Date) return value;
+  const serial = Number(value);
+  if (!Number.isFinite(serial) || serial < 30000) return null;
+  return new Date(Math.round((serial - 25569) * 86400 * 1000));
+}
+
+async function unzipXlsx(buffer) {
+  if (!("DecompressionStream" in window)) throw new Error("Excel import needs a modern browser");
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  let eocd = -1;
+  for (let index = bytes.length - 22; index >= 0; index -= 1) {
+    if (view.getUint32(index, true) === 0x06054b50) {
+      eocd = index;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error("Could not read Excel file");
+  const entryCount = view.getUint16(eocd + 10, true);
+  const centralOffset = view.getUint32(eocd + 16, true);
+  const entries = new Map();
+  let pointer = centralOffset;
+  for (let item = 0; item < entryCount; item += 1) {
+    if (view.getUint32(pointer, true) !== 0x02014b50) break;
+    const method = view.getUint16(pointer + 10, true);
+    const compressedSize = view.getUint32(pointer + 20, true);
+    const fileNameLength = view.getUint16(pointer + 28, true);
+    const extraLength = view.getUint16(pointer + 30, true);
+    const commentLength = view.getUint16(pointer + 32, true);
+    const localOffset = view.getUint32(pointer + 42, true);
+    const name = new TextDecoder().decode(bytes.slice(pointer + 46, pointer + 46 + fileNameLength));
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const compressed = bytes.slice(dataStart, dataStart + compressedSize);
+    entries.set(name, method === 0 ? compressed : await inflateRaw(compressed));
+    pointer += 46 + fileNameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+async function inflateRaw(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function textFromEntry(entries, path) {
+  const bytes = entries.get(path);
+  if (!bytes) throw new Error(`Excel file is missing ${path}`);
+  return new TextDecoder().decode(bytes);
+}
+
+function decodeXml(value = "") {
+  return value.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&").replaceAll("&quot;", '"').replaceAll("&apos;", "'");
+}
+
+function parseSharedStrings(xml) {
+  return [...xml.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((match) =>
+    decodeXml([...match[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((text) => text[1]).join("")),
+  );
+}
+
+function parseWorkbookSheets(xml) {
+  const rels = [...xml.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*r:id="rId(\d+)"[^>]*\/>/g)];
+  return rels.map((match) => ({ name: decodeXml(match[1]), path: `xl/worksheets/sheet${match[2]}.xml` }));
+}
+
+function parseSheetRows(xml, sharedStrings) {
+  const rows = [];
+  for (const rowMatch of xml.matchAll(/<row[^>]*r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g)) {
+    const row = [];
+    for (const cellMatch of rowMatch[2].matchAll(/<c\s+([^>]*)>([\s\S]*?)<\/c>/g)) {
+      const attrs = cellMatch[1];
+      const body = cellMatch[2];
+      const ref = attrs.match(/r="([A-Z]+\d+)"/)?.[1];
+      if (!ref) continue;
+      const type = attrs.match(/t="([^"]+)"/)?.[1];
+      let value = body.match(/<v>([\s\S]*?)<\/v>/)?.[1] ?? "";
+      if (type === "s") value = sharedStrings[Number(value)] ?? value;
+      if (type === "inlineStr") value = decodeXml([...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((text) => text[1]).join(""));
+      row[columnIndex(ref)] = value;
+    }
+    rows[Number(rowMatch[1]) - 1] = row;
+  }
+  return rows.filter(Boolean);
+}
+
+function columnIndex(ref) {
+  const letters = ref.match(/[A-Z]+/)?.[0] ?? "A";
+  let index = 0;
+  for (const letter of letters) index = index * 26 + letter.charCodeAt(0) - 64;
+  return index - 1;
 }
 
 function createFirstEmployer(event) {

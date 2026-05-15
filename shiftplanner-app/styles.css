@@ -645,7 +645,7 @@ th {
 
 .shift-select,
 .location-select {
-  width: 132px;
+  width: 152px;
   border: 0;
   border-radius: 5px;
   padding: 7px 8px;
@@ -655,7 +655,7 @@ th {
 }
 
 .location-select {
-  width: 136px;
+  width: 146px;
   font-weight: 600;
 }
 
@@ -1374,7 +1374,7 @@ th {
 
   .shift-select,
   .location-select {
-    width: 112px;
+    width: 138px;
     padding: 7px 6px;
   }
 
