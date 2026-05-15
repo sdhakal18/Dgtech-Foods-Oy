@@ -1597,7 +1597,7 @@ function parseImportedShift(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return { shift: "00:00-00:00", location: "Koivistonkylä" };
   if (/wish|off/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "OFF", location: "Koivistonkylä" };
-  const location = /ylo|ylö/i.test(raw) ? "Ylöjärvi" : "Koivistonkylä";
+  const location = isYloLocation(raw) ? "Ylöjärvi" : "Koivistonkylä";
   if (!state.locations.includes(location)) state.locations.push(location);
   const match = raw.match(/(\d{1,2})(?::?(\d{2}))?\s*[-–—]\s*(\d{1,2})(?::?(\d{2}))?/);
   if (!match) {
@@ -1611,6 +1611,14 @@ function parseImportedShift(value) {
   const shift = `${startHour}:${startMinute}-${endHour}:${endMinute}`;
   if (!isValidShift(shift)) return null;
   return { shift, location };
+}
+
+function isYloLocation(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .includes("ylo");
 }
 
 function excelDate(value) {
