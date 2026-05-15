@@ -139,6 +139,7 @@ function publicState(state, user = null, inviteToken = "") {
     user?.type === "employer"
       ? state.auth.invites
       : state.auth.invites.filter((invite) => invite.token === inviteToken && !invite.used);
+  const publicMonths = user?.type === "employee" ? employeeVisibleMonths(state.months, user.employeeName, state.locations[0] ?? "") : state.months;
   return {
     year: state.year,
     month: state.month,
@@ -150,7 +151,7 @@ function publicState(state, user = null, inviteToken = "") {
     quickDuplicate: state.quickDuplicate,
     employees: state.employees,
     locations: state.locations,
-    months: state.months,
+    months: publicMonths,
     history: state.history,
     auth: {
       employers: state.auth.employers.map(publicAccount),
@@ -159,6 +160,23 @@ function publicState(state, user = null, inviteToken = "") {
       session: user ? { type: user.type, id: user.id } : null,
     },
   };
+}
+
+function employeeVisibleMonths(months, employeeName, defaultLocation) {
+  const result = {};
+  for (const [month, days] of Object.entries(months ?? {})) {
+    result[month] = {};
+    for (const [day, entries] of Object.entries(days ?? {})) {
+      result[month][day] = {};
+      for (const [employee, entry] of Object.entries(entries ?? {})) {
+        const visible = entry?.published || (employee === employeeName && entry?.shift === "Wish OFF");
+        result[month][day][employee] = visible
+          ? entry
+          : { shift: "00:00-00:00", location: entry?.location || defaultLocation, comment: "", published: false, publishedShift: "", paidShift: "" };
+      }
+    }
+  }
+  return result;
 }
 
 function findUserByToken(state, token) {
@@ -196,6 +214,16 @@ function requireEmployer(state, token) {
   const user = findUserByToken(state, token);
   if (user?.type !== "employer") {
     const error = new Error("Employer login required");
+    error.status = 403;
+    throw error;
+  }
+  return user;
+}
+
+function requireEmployee(state, token) {
+  const user = findUserByToken(state, token);
+  if (user?.type !== "employee") {
+    const error = new Error("Employee login required");
     error.status = 403;
     throw error;
   }
@@ -283,6 +311,31 @@ module.exports = async function handler(req, res) {
       state.history = next.history ?? state.history;
       await writeStore(state);
       return send(res, 200, { ok: true, state: publicState(state, user) });
+    }
+
+    if (body.action === "employeeRequest") {
+      const employee = requireEmployee(state, token);
+      const year = Number(body.year);
+      const month = Number(body.month);
+      const day = String(Number(body.day));
+      if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(Number(day))) return send(res, 400, { error: "Invalid date" });
+      if (body.employee !== employee.employeeName) return send(res, 403, { error: "Employees can only request their own days" });
+      const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+      state.months[key] ??= {};
+      state.months[key][day] ??= {};
+      state.months[key][day][employee.employeeName] ??= { shift: "00:00-00:00", location: state.locations[0] ?? "" };
+      const entry = state.months[key][day][employee.employeeName];
+      if (entry.published) return send(res, 403, { error: "Published shifts can only be changed by employer" });
+      const requestedShift = String(body.shift || "00:00-00:00");
+      if (!["Wish OFF", "00:00-00:00"].includes(requestedShift)) return send(res, 400, { error: "Employees can only request Wish OFF before publishing" });
+      entry.shift = requestedShift;
+      entry.comment = String(body.comment || "").trim().slice(0, 300);
+      entry.published = false;
+      entry.publishedShift = "";
+      entry.paidShift = "";
+      state.history = [`${employee.employeeName} requested ${requestedShift} on ${day}.${month + 1}.${year}`, ...(state.history ?? [])].slice(0, 80);
+      await writeStore(state);
+      return send(res, 200, { ok: true, state: publicState(state, employee) });
     }
 
     if (body.action === "addEmployer") {

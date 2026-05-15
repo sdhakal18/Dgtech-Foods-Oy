@@ -10,7 +10,32 @@ const employeesDefault = [
 ];
 
 const locationsDefault = ["Koivistonkylä", "Ylöjärvi"];
-const shifts = ["00:00-00:00", "09:00-14:00", "09:00-17:00", "13:00-18:00", "17:00-23:00", "OFF"];
+const shifts = [
+  "00:00-00:00",
+  "07:00-15:00",
+  "08:45-20:00",
+  "09:00-14:00",
+  "09:00-16:00",
+  "09:00-17:00",
+  "09:00-18:30",
+  "09:00-19:00",
+  "09:00-19:30",
+  "09:00-20:00",
+  "09:00-20:30",
+  "10:00-18:30",
+  "10:00-19:00",
+  "11:00-20:00",
+  "13:00-18:00",
+  "14:00-19:00",
+  "14:00-19:30",
+  "14:00-21:00",
+  "15:00-20:30",
+  "17:00-23:00",
+  "OFF",
+  "Wish OFF",
+  "Sick leave",
+];
+const nonWorkingShifts = ["OFF", "Wish OFF", "Sick leave", "00:00-00:00"];
 const monthNames = [
   "January",
   "February",
@@ -313,6 +338,10 @@ function ensureMonth(year = state.year, month = state.month) {
       data[day][employee] = {
         shift: "00:00-00:00",
         location: state.locations[0] ?? "",
+        comment: "",
+        published: false,
+        publishedShift: "",
+        paidShift: "",
       };
     }
   }
@@ -331,6 +360,10 @@ function normalizeMonthData() {
       data[day][employee] ??= { shift: "00:00-00:00", location: state.locations[0] ?? "" };
       data[day][employee].shift ||= "00:00-00:00";
       data[day][employee].location ||= state.locations[0] ?? "";
+      data[day][employee].comment ||= "";
+      data[day][employee].published = Boolean(data[day][employee].published);
+      data[day][employee].publishedShift ||= data[day][employee].published ? data[day][employee].shift : "";
+      data[day][employee].paidShift ||= "";
     }
     for (const employee of Object.keys(data[day])) {
       if (!state.employees.includes(employee)) delete data[day][employee];
@@ -340,7 +373,7 @@ function normalizeMonthData() {
 
 function hoursFromShift(shift) {
   const normalized = normalizeShift(shift);
-  if (!normalized || normalized === "OFF" || normalized === "00:00-00:00") return 0;
+  if (!normalized || nonWorkingShifts.includes(normalized)) return 0;
   const [start, end] = normalized.split("-");
   if (!start || !end) return 0;
   const toHours = (value) => {
@@ -354,17 +387,25 @@ function hoursFromShift(shift) {
 }
 
 function normalizeShift(value) {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .replace(/[–—]/g, "-");
+  const raw = String(value ?? "").trim().replace(/[–—]/g, "-");
+  const compact = raw.replace(/\s+/g, "").toUpperCase();
+  if (!compact) return "";
+  if (compact === "OFF") return "OFF";
+  if (compact === "WISHOFF") return "Wish OFF";
+  if (compact === "SICKLEAVE") return "Sick leave";
+  return compact;
 }
 
 function isValidShift(value) {
   const normalized = normalizeShift(value);
-  if (normalized === "" || normalized === "OFF") return true;
+  if (normalized === "" || nonWorkingShifts.includes(normalized)) return true;
   return /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(normalized);
+}
+
+function hoursForEntry(entry) {
+  if (!entry) return 0;
+  if (entry.shift === "Sick leave") return hoursFromShift(entry.paidShift || entry.publishedShift);
+  return hoursFromShift(entry.shift);
 }
 
 function formatNumber(value) {
@@ -471,6 +512,8 @@ function dayLabel(info) {
 
 function classForShift(shift) {
   if (shift === "OFF") return "off";
+  if (shift === "Wish OFF") return "wish";
+  if (shift === "Sick leave") return "sick";
   if (shift === "09:00-14:00") return "morning";
   if (shift === "09:00-17:00") return "day";
   if (shift === "13:00-18:00") return "afternoon";
@@ -584,8 +627,9 @@ function getStats(options = {}) {
     weekStats[week] ??= { total: 0, shifts: 0, days: new Set() };
     for (const employee of employees) {
       const entry = data[day][employee];
+      if (!canSeeEntry(employee, entry)) continue;
       if (selectedLocation && entry.location !== selectedLocation) continue;
-      const hours = hoursFromShift(entry.shift);
+      const hours = hoursForEntry(entry);
       const location = entry.location;
       total += hours;
       employeeStats[employee].total += hours;
@@ -724,27 +768,24 @@ function renderSchedule() {
       const day = date.getDate();
       const data = ensureMonth(state.year, state.month);
       const info = dayInfo(day);
-      const total = employees.reduce((sum, employee) => sum + hoursFromShift(data[day][employee].shift), 0);
+      const total = employees.reduce((sum, employee) => {
+        const entry = data[day][employee];
+        return canSeeEntry(employee, entry) ? sum + hoursForEntry(entry) : sum;
+      }, 0);
       const redClass = info.isRedDay ? " red-day-row" : "";
       const redTitle = info.holidayName || (info.isSunday ? "Sunday" : "");
       rows.push(`<tr class="${redClass.trim()}" title="${esc(redTitle)}"><td class="date-cell ${info.isRedDay ? "red-day-cell" : ""}">${day}</td><td class="day-cell ${info.isRedDay ? "red-day-cell" : ""}">${dayLabel(info)}</td>`);
       for (const employee of employees) {
         const entry = data[day][employee];
-        rows.push(`<td>${shiftSelect(day, employee, entry.shift)}</td>`);
+        rows.push(`<td>${scheduleCell(day, employee, entry)}</td>`);
       }
       rows.push(`<td class="daily-total">${formatNumber(total)}</td></tr>`);
-      rows.push(`<tr class="${redClass.trim()}" title="${esc(redTitle)}"><td class="${info.isRedDay ? "red-day-cell" : ""}"></td><td class="restaurant-label ${info.isRedDay ? "red-day-cell" : ""}">Restaurant</td>`);
-      for (const employee of employees) {
-        const entry = data[day][employee];
-        rows.push(`<td>${locationSelect(day, employee, entry.location)}</td>`);
-      }
-      rows.push(`<td class="daily-total"></td></tr>`);
     }
     const weeklyEmployeeTotals = employees.map((employee) =>
       block.dates.reduce((sum, date) => {
         if (date.getFullYear() !== state.year || date.getMonth() !== state.month) return sum;
         const entry = dataForDate(date)?.[employee];
-        return sum + hoursFromShift(entry?.shift);
+        return canSeeEntry(employee, entry) ? sum + hoursForEntry(entry) : sum;
       }, 0),
     );
     const weeklyTotal = weeklyEmployeeTotals.reduce((sum, value) => sum + value, 0);
@@ -755,8 +796,28 @@ function renderSchedule() {
   el.scheduleTable.innerHTML = rows.join("");
 }
 
-function shiftSelect(day, employee, value) {
-  const locked = isEmployer() ? "" : "readonly";
+function scheduleCell(day, employee, entry) {
+  const visible = canSeeEntry(employee, entry) || employee === state.activeEmployee;
+  if (!visible) return `<div class="schedule-cell muted-cell">Unpublished</div>`;
+  const tools = isEmployer()
+    ? `<button class="publish-button ${entry.published ? "published" : ""}" type="button" data-publish-day="${day}" data-publish-employee="${encodeURIComponent(employee)}">${entry.published ? "Published" : "Publish"}</button>`
+    : entry.published
+      ? `<span class="published-badge">Published</span>`
+      : `<span class="published-badge draft">Unpublished</span>`;
+  const sickPaid = entry.shift === "Sick leave" && hoursForEntry(entry) > 0 ? `<span class="paid-shift">Paid: ${esc(entry.paidShift || entry.publishedShift)}</span>` : "";
+  return `
+    <div class="schedule-cell ${entry.published ? "published-cell" : "draft-cell"}">
+      ${shiftSelect(day, employee, entry)}
+      ${locationSelect(day, employee, entry)}
+      ${commentInput(day, employee, entry)}
+      <div class="cell-tools">${tools}${sickPaid}</div>
+    </div>
+  `;
+}
+
+function shiftSelect(day, employee, entry) {
+  const value = entry.shift;
+  const locked = canEditEntry(employee, entry, "shift") ? "" : "readonly";
   return `
     <input
       class="shift-select ${classForShift(value)}"
@@ -772,13 +833,33 @@ function shiftSelect(day, employee, value) {
   `;
 }
 
-function locationSelect(day, employee, value) {
-  const locked = isEmployer() ? "" : "disabled";
+function locationSelect(day, employee, entry) {
+  const value = entry.location;
+  const locked = canEditEntry(employee, entry, "location") ? "" : "disabled";
   return `
     <select class="location-select ${classForLocation(value)}" data-day="${day}" data-employee="${encodeURIComponent(employee)}" data-field="location" ${locked}>
       ${state.locations.map((location) => `<option value="${esc(location)}" ${location === value ? "selected" : ""}>${esc(location)}</option>`).join("")}
     </select>
   `;
+}
+
+function commentInput(day, employee, entry) {
+  const locked = canEditEntry(employee, entry, "comment") ? "" : "readonly";
+  return `
+    <textarea class="comment-input" data-day="${day}" data-employee="${encodeURIComponent(employee)}" data-field="comment" rows="2" placeholder="Comment" ${locked}>${esc(entry.comment)}</textarea>
+  `;
+}
+
+function canEditEntry(employee, entry, field) {
+  if (isEmployer()) return true;
+  if (employee !== state.activeEmployee || entry.published) return false;
+  return field === "shift" || field === "comment";
+}
+
+function canSeeEntry(employee, entry) {
+  if (isEmployer()) return true;
+  if (entry?.published) return true;
+  return employee === state.activeEmployee && entry?.shift === "Wish OFF";
 }
 
 function renderEmployeeSummary() {
@@ -832,7 +913,7 @@ function renderLocationSummary() {
     const active = [];
     for (const employee of employees) {
       const entry = data[day][employee];
-      const hours = hoursFromShift(entry.shift);
+      const hours = hoursForEntry(entry);
       if (hours > 0) active.push({ employee, ...entry, hours });
     }
     if (!active.length) continue;
@@ -1011,8 +1092,9 @@ function buildReportHtml(config = getReportConfig()) {
     config.days.some((day) => {
       const entry = data[day]?.[employee];
       if (!entry) return false;
+      if (!canSeeEntry(employee, entry)) return false;
       if (config.location && entry.location !== config.location) return false;
-      return hoursFromShift(entry.shift) > 0;
+      return hoursForEntry(entry) > 0;
     }),
   );
   const reportEmployees = visibleEmployees.length ? visibleEmployees : [];
@@ -1028,7 +1110,7 @@ function buildReportHtml(config = getReportConfig()) {
               const dayCells = reportEmployees
                 .map((employee) => {
                   const entry = data[day]?.[employee];
-                  if (!entry || (config.location && entry.location !== config.location) || hoursFromShift(entry.shift) <= 0) return "<td></td>";
+                  if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location) || hoursForEntry(entry) <= 0) return "<td></td>";
                   return `<td>${esc(reportShiftText(entry))}</td>`;
                 })
                 .join("");
@@ -1066,8 +1148,8 @@ function reportWeekTotalRow(group, employees, config, data) {
     .map((employee) => {
       const total = group.days.reduce((sum, day) => {
         const entry = data[day]?.[employee];
-        if (!entry || (config.location && entry.location !== config.location)) return sum;
-        return sum + hoursFromShift(entry.shift);
+        if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location)) return sum;
+        return sum + hoursForEntry(entry);
       }, 0);
       return `<td>${formatNumber(total)}</td>`;
     })
@@ -1081,8 +1163,8 @@ function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) 
     .map((employee) => {
       const total = allDays.reduce((sum, day) => {
         const entry = data[day]?.[employee];
-        if (!entry || (config.location && entry.location !== config.location)) return sum;
-        return sum + hoursFromShift(entry.shift);
+        if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location)) return sum;
+        return sum + hoursForEntry(entry);
       }, 0);
       return `<td>${formatNumber(total)}</td>`;
     })
@@ -1091,6 +1173,7 @@ function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) 
 }
 
 function reportShiftText(entry) {
+  if (entry.shift === "Sick leave") return `Sick leave(${entry.paidShift || entry.publishedShift || "paid shift"})`;
   if (entry.location === "Ylöjärvi") return `${entry.shift}(Ylo)`;
   if (entry.location && entry.location !== "Koivistonkylä") return `${entry.shift}(${entry.location})`;
   return entry.shift;
@@ -1171,29 +1254,89 @@ function render() {
   renderWeeks();
   renderSettings();
   renderReportPreview();
+  publishButtonState();
   document.querySelectorAll(".nav-tab").forEach((button) => button.classList.toggle("active", button.dataset.view === state.view));
   document.querySelectorAll(".view-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `${state.view}View`));
 }
 
 function updateEntry(target) {
-  if (!isEmployer()) return;
   const day = target.dataset.day;
   const employee = decodeURIComponent(target.dataset.employee);
   const field = target.dataset.field;
   if (!day || !employee || !field) return;
+  const entry = ensureMonth()[day][employee];
+  if (!canEditEntry(employee, entry, field)) return;
   if (field === "shift") {
     const nextValue = normalizeShift(target.value);
-    if (!isValidShift(nextValue)) {
-      target.classList.add("invalid");
-      toast("Use HH:MM-HH:MM or OFF");
+    if (isEmployee() && !["", "00:00-00:00", "Wish OFF"].includes(nextValue)) {
+      target.value = entry.shift;
+      toast("Employees can only request Wish OFF before publishing");
       return;
     }
-    ensureMonth()[day][employee][field] = nextValue || "00:00-00:00";
+    if (!isValidShift(nextValue)) {
+      target.classList.add("invalid");
+      toast("Use HH:MM-HH:MM, OFF, Wish OFF, or Sick leave");
+      return;
+    }
+    if (nextValue === "Sick leave" && entry.shift !== "Sick leave") {
+      entry.paidShift = entry.publishedShift || (hoursFromShift(entry.shift) > 0 ? entry.shift : "");
+    }
+    if (nextValue !== "Sick leave") entry.paidShift = "";
+    entry[field] = nextValue || "00:00-00:00";
+    if (isEmployer() && entry.published && entry.shift !== "Sick leave") entry.publishedShift = entry.shift;
   } else {
-    ensureMonth()[day][employee][field] = target.value;
+    entry[field] = field === "comment" ? target.value.trim() : target.value;
   }
+  if (isEmployee()) saveEmployeeEntryRequest(day, employee, entry);
   saveState();
   render();
+}
+
+function saveEmployeeEntryRequest(day, employee, entry) {
+  if (!serverReady) return;
+  apiRequest("employeeRequest", {
+    day,
+    employee,
+    shift: entry.shift,
+    comment: entry.comment,
+    year: state.year,
+    month: state.month,
+  }).catch((error) => toast(error.message));
+}
+
+function togglePublish(day, employee) {
+  if (!isEmployer()) return;
+  const entry = ensureMonth()[day]?.[employee];
+  if (!entry) return;
+  entry.published = !entry.published;
+  entry.publishedShift = entry.published ? entry.shift : "";
+  if (entry.shift === "Sick leave" && entry.published && !entry.paidShift) entry.paidShift = entry.publishedShift;
+  saveState(true);
+  render();
+}
+
+function publishVisibleMonth() {
+  if (!isEmployer()) return;
+  const data = ensureMonth();
+  for (let day = 1; day <= daysInMonth(); day += 1) {
+    for (const employee of state.employees) {
+      const entry = data[day]?.[employee];
+      if (!entry) continue;
+      entry.published = true;
+      entry.publishedShift = entry.shift;
+      if (entry.shift === "Sick leave" && !entry.paidShift) entry.paidShift = entry.publishedShift;
+    }
+  }
+  logHistory(`Published ${monthNames[state.month]} ${state.year}`);
+  saveState(true);
+  render();
+  toast("Month published to employees");
+}
+
+function publishButtonState() {
+  const button = document.querySelector("#publishMonth");
+  if (!button) return;
+  button.hidden = !isEmployer();
 }
 
 function seedMaySample() {
@@ -1209,6 +1352,10 @@ function seedMaySample() {
       data[day][employee] = {
         shift,
         location: shift === "OFF" ? state.locations[0] : state.locations[(day + index) % state.locations.length],
+        comment: "",
+        published: false,
+        publishedShift: "",
+        paidShift: "",
       };
     });
   }
@@ -1224,7 +1371,7 @@ function blankMonth() {
   for (let day = 1; day <= daysInMonth(); day += 1) {
     data[day] = {};
     for (const employee of state.employees) {
-      data[day][employee] = { shift: "00:00-00:00", location: state.locations[0] ?? "" };
+      data[day][employee] = { shift: "00:00-00:00", location: state.locations[0] ?? "", comment: "", published: false, publishedShift: "", paidShift: "" };
     }
   }
   state.months[monthKey()] = data;
@@ -1283,7 +1430,14 @@ function dataForDate(date) {
 }
 
 function copyEntry(entry) {
-  return { shift: entry?.shift || "00:00-00:00", location: entry?.location || state.locations[0] || "" };
+  return {
+    shift: entry?.shift || "00:00-00:00",
+    location: entry?.location || state.locations[0] || "",
+    comment: entry?.comment || "",
+    published: false,
+    publishedShift: "",
+    paidShift: "",
+  };
 }
 
 function duplicateRecentDays(dayCount, label, targetValue = "") {
@@ -1335,7 +1489,7 @@ function addEmployee() {
   state.employees.push(name);
   for (const month of Object.values(state.months)) {
     for (const day of Object.values(month)) {
-      day[name] = { shift: "00:00-00:00", location: state.locations[0] ?? "" };
+      day[name] = { shift: "00:00-00:00", location: state.locations[0] ?? "", comment: "", published: false, publishedShift: "", paidShift: "" };
     }
   }
   el.newEmployee.value = "";
@@ -1628,7 +1782,7 @@ function findOrCreateImportedEmployee(name) {
   state.employees.push(name);
   for (const month of Object.values(state.months)) {
     for (const day of Object.values(month)) {
-      day[name] = { shift: "00:00-00:00", location: state.locations[0] ?? "" };
+      day[name] = { shift: "00:00-00:00", location: state.locations[0] ?? "", comment: "", published: false, publishedShift: "", paidShift: "" };
     }
   }
   return name;
@@ -1637,11 +1791,15 @@ function findOrCreateImportedEmployee(name) {
 function parseImportedShift(value) {
   const raw = String(value ?? "").trim();
   if (!raw) return { shift: "00:00-00:00", location: "Koivistonkylä" };
-  if (/wish|off/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "OFF", location: "Koivistonkylä" };
+  if (/sick/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "Sick leave", location: "Koivistonkylä" };
+  if (/wish/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "Wish OFF", location: "Koivistonkylä" };
+  if (/off/i.test(raw) && !/\d{1,2}/.test(raw)) return { shift: "OFF", location: "Koivistonkylä" };
   const location = isYloLocation(raw) ? "Ylöjärvi" : "Koivistonkylä";
   if (!state.locations.includes(location)) state.locations.push(location);
   const match = raw.match(/(\d{1,2})(?::?(\d{2}))?\s*[-–—]\s*(\d{1,2})(?::?(\d{2}))?/);
   if (!match) {
+    if (/sick/i.test(raw)) return { shift: "Sick leave", location };
+    if (/wish/i.test(raw)) return { shift: "Wish OFF", location };
     if (/off|wish/i.test(raw)) return { shift: "OFF", location };
     return null;
   }
@@ -1928,14 +2086,21 @@ document.addEventListener("change", (event) => {
 document.addEventListener("input", (event) => {
   if (event.target === el.employeeFilter) renderSchedule();
   if (event.target.matches('input[data-field="shift"]')) {
-    if (!isEmployer()) return;
+    const day = event.target.dataset.day;
+    const employee = decodeURIComponent(event.target.dataset.employee);
+    const entry = ensureMonth()[day]?.[employee];
+    if (!entry || !canEditEntry(employee, entry, "shift")) return;
     const valid = isValidShift(event.target.value);
     event.target.classList.toggle("invalid", !valid);
     const normalized = normalizeShift(event.target.value);
-    if (valid && (normalized === "OFF" || /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(normalized))) {
-      const day = event.target.dataset.day;
-      const employee = decodeURIComponent(event.target.dataset.employee);
-      ensureMonth()[day][employee].shift = normalized;
+    const canLiveSave = isEmployer() || ["Wish OFF", "00:00-00:00"].includes(normalized);
+    if (valid && canLiveSave && (nonWorkingShifts.includes(normalized) || /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(normalized))) {
+      if (normalized === "Sick leave" && entry.shift !== "Sick leave") {
+        entry.paidShift = entry.publishedShift || (hoursFromShift(entry.shift) > 0 ? entry.shift : "");
+      }
+      if (normalized !== "Sick leave") entry.paidShift = "";
+      entry.shift = normalized || "00:00-00:00";
+      if (isEmployer() && entry.published && entry.shift !== "Sick leave") entry.publishedShift = entry.shift;
       saveState();
       renderShell();
       renderEmployeeSummary();
@@ -1946,7 +2111,7 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("focusout", (event) => {
-  if (event.target.matches('input[data-field="shift"]')) {
+  if (event.target.matches('[data-field="shift"], [data-field="comment"]')) {
     const target = event.target;
     window.setTimeout(() => {
       if (target.isConnected && !target.readOnly) updateEntry(target);
@@ -1956,6 +2121,13 @@ document.addEventListener("focusout", (event) => {
 
 document.addEventListener("click", (event) => {
   if (!currentUser()) return;
+
+  const publishButton = event.target.closest("[data-publish-day]");
+  if (publishButton) {
+    const employee = decodeURIComponent(publishButton.dataset.publishEmployee);
+    togglePublish(publishButton.dataset.publishDay, employee);
+    return;
+  }
 
   const nav = event.target.closest(".nav-tab");
   if (nav) {
@@ -2039,6 +2211,7 @@ document.querySelector("#openReport").addEventListener("click", openReportWindow
 el.copyLastWeek.addEventListener("click", () => duplicateRecentDays(7, "last week", state.quickDuplicate.targetWeek));
 el.copyLastThreeWeeks.addEventListener("click", () => duplicateRecentDays(21, "last 3 weeks", state.quickDuplicate.targetThreeWeeks));
 el.copyLastMonth.addEventListener("click", duplicateLastMonth);
+document.querySelector("#publishMonth").addEventListener("click", publishVisibleMonth);
 el.duplicateShifts.addEventListener("click", duplicateShifts);
 el.setupForm.addEventListener("submit", createFirstEmployer);
 el.loginForm.addEventListener("submit", login);

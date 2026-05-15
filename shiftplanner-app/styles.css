@@ -270,9 +270,16 @@ input {
 }
 
 .employee-mode .shift-select,
-.employee-mode .location-select {
+.employee-mode .location-select,
+.employee-mode .comment-input {
   cursor: not-allowed;
   opacity: 0.82;
+}
+
+.employee-mode .draft-cell .shift-select,
+.employee-mode .draft-cell .comment-input {
+  cursor: text;
+  opacity: 1;
 }
 
 .side-actions {
@@ -654,6 +661,81 @@ th {
   text-align: center;
 }
 
+.schedule-cell {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  min-width: 178px;
+}
+
+.schedule-cell.draft-cell {
+  background: rgba(244, 248, 251, 0.68);
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.schedule-cell.published-cell {
+  background: rgba(233, 247, 239, 0.7);
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.muted-cell {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.comment-input {
+  width: 152px;
+  min-height: 44px;
+  resize: vertical;
+  border: 1px solid #d7e0ea;
+  border-radius: 5px;
+  padding: 6px 8px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.cell-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.publish-button,
+.published-badge,
+.paid-shift {
+  border: 1px solid #9db4c9;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #ffffff;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.publish-button.published,
+.published-badge {
+  border-color: #39865e;
+  background: #e7f6ec;
+  color: #23633f;
+}
+
+.published-badge.draft {
+  border-color: #c9a227;
+  background: #fff7d1;
+  color: #7b5c00;
+}
+
+.paid-shift {
+  border-color: #c9a227;
+  background: #fff7d1;
+  color: #5f4a00;
+}
+
 .location-select {
   width: 146px;
   font-weight: 600;
@@ -663,6 +745,16 @@ th {
   outline: 2px solid var(--red);
   background: var(--soft-red);
   color: #a8323e;
+}
+
+.wish {
+  background: #fff3bf;
+  color: #765a00;
+}
+
+.sick {
+  background: #fdebed;
+  color: #9d2235;
 }
 
 .loc-koivistonkylä {
@@ -1440,9 +1532,14 @@ th {
   }
 
   .shift-select,
-  .location-select {
+  .location-select,
+  .comment-input {
     width: 138px;
     padding: 7px 6px;
+  }
+
+  .schedule-cell {
+    min-width: 152px;
   }
 
   .schedule-table th:first-child,
