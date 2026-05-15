@@ -882,6 +882,41 @@ th {
   text-align: left;
 }
 
+.matrix-report {
+  font-size: 11px;
+}
+
+.matrix-report th,
+.matrix-report td {
+  min-width: 76px;
+  white-space: normal;
+}
+
+.matrix-report th:first-child,
+.matrix-report td:first-child {
+  min-width: 150px;
+}
+
+.matrix-report td small,
+.matrix-report th small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.report-week-total,
+.report-week-total-head,
+.report-period-total {
+  background: #edf7ff;
+  color: var(--navy);
+  font-weight: 900;
+}
+
+.report-period-total {
+  background: var(--soft-teal);
+}
+
 .print-report .report-red-day-cell {
   color: #b4232f;
   background: #fdebed;

@@ -1017,35 +1017,30 @@ function buildReportHtml(config = getReportConfig()) {
   );
   const reportEmployees = visibleEmployees.length ? visibleEmployees : [];
   const stats = getStats({ employees: reportEmployees, days: config.days, location: config.location });
-  const rows = [];
-  for (const day of config.days) {
-    const visibleRows = [];
-    for (const employee of reportEmployees) {
-      const entry = data[day][employee];
-      const hours = hoursFromShift(entry.shift);
-      if (config.location && entry.location !== config.location) continue;
-      if (hours <= 0) continue;
-      visibleRows.push({ employee, ...entry, hours });
-    }
-    for (const row of visibleRows) {
-      const info = dayInfo(day);
-      rows.push(`
-        <tr class="${info.isRedDay ? "report-red-day" : ""}">
-          <td class="${info.isRedDay ? "report-red-day-cell" : ""}">${day}</td>
-          <td class="${info.isRedDay ? "report-red-day-cell" : ""}">${dayLabel(info)}</td>
-          <td class="report-name-cell">${esc(row.employee)}</td>
-          <td>${esc(row.shift)}</td>
-          <td>${esc(row.location)}</td>
-          <td>${formatNumber(row.hours)}</td>
-        </tr>
-      `);
-    }
-  }
-
-  const employeeRows = reportEmployees
+  const weekGroups = reportWeekGroups(config.days);
+  const reportHead = weekGroups
+    .map((group) => `${group.days.map((day) => `<th class="${dayInfo(day).isRedDay ? "report-red-day-cell" : ""}">${day}<small>${esc(dayInfo(day).label)}</small></th>`).join("")}<th class="report-week-total-head">Week ${group.week}<br>Total</th>`)
+    .join("");
+  const reportRows = reportEmployees
     .map((employee) => {
-      const stat = stats.employeeStats[employee];
-      return `<tr><td>${esc(employee)}</td>${state.locations.map((loc) => `<td>${formatNumber(stat?.byLocation[loc] ?? 0)}</td>`).join("")}<td>${formatNumber(stat?.total ?? 0)}</td><td>${stat?.days ?? 0}</td></tr>`;
+      let periodTotal = 0;
+      const cells = weekGroups
+        .map((group) => {
+          let weekTotal = 0;
+          const dayCells = group.days
+            .map((day) => {
+              const entry = data[day]?.[employee];
+              const hours = entry && (!config.location || entry.location === config.location) ? hoursFromShift(entry.shift) : 0;
+              weekTotal += hours;
+              periodTotal += hours;
+              const text = hours > 0 ? `${esc(entry.shift)}<small>${esc(entry.location)}</small>` : "";
+              return `<td class="${dayInfo(day).isRedDay ? "report-red-day-cell" : ""}">${text}</td>`;
+            })
+            .join("");
+          return `${dayCells}<td class="report-week-total">${formatNumber(weekTotal)}</td>`;
+        })
+        .join("");
+      return `<tr><td class="report-name-cell">${esc(employee)}</td>${cells}<td class="report-period-total">${formatNumber(periodTotal)}</td></tr>`;
     })
     .join("");
 
@@ -1061,15 +1056,10 @@ function buildReportHtml(config = getReportConfig()) {
         <div><span>Working shifts</span><strong>${stats.shiftsWorked}</strong></div>
         ${state.locations.map((loc) => `<div><span>${esc(loc)}</span><strong>${formatNumber(stats.locationStats[loc]?.total ?? 0)}</strong></div>`).join("")}
       </section>
-      <h3>Worked shifts</h3>
-      <table>
-        <thead><tr><th>Date</th><th>Day</th><th>Employee</th><th>Shift</th><th>Restaurant</th><th>Hours</th></tr></thead>
-        <tbody>${rows.join("") || `<tr><td colspan="6">No worked shifts in this report period.</td></tr>`}</tbody>
-      </table>
-      <h3>Employee totals</h3>
-      <table>
-        <thead><tr><th>Employee</th>${state.locations.map((loc) => `<th>${esc(loc)}</th>`).join("")}<th>Total</th><th>Days</th></tr></thead>
-        <tbody>${employeeRows || `<tr><td colspan="${state.locations.length + 3}">No employees with worked shifts.</td></tr>`}</tbody>
+      <h3>Shift report</h3>
+      <table class="matrix-report">
+        <thead><tr><th>Employee</th>${reportHead}<th>Period<br>Total</th></tr></thead>
+        <tbody>${reportRows || `<tr><td colspan="${weekGroups.reduce((sum, group) => sum + group.days.length + 1, 2)}">No employees with worked shifts.</td></tr>`}</tbody>
       </table>
       <footer class="report-footer">
         <p>© 2026 Dgtech foods oy. All Rights Reserved.</p>
@@ -1077,6 +1067,19 @@ function buildReportHtml(config = getReportConfig()) {
       </footer>
     </article>
   `;
+}
+
+function reportWeekGroups(days) {
+  const selected = new Set(days.map(String));
+  return duplicateBlocks("week", state.year, state.month)
+    .map((block) => ({
+      week: dayInfo(block.dates.find((date) => date.getFullYear() === state.year && date.getMonth() === state.month)?.getDate() ?? 1).isoWeek,
+      days: block.dates
+        .filter((date) => date.getFullYear() === state.year && date.getMonth() === state.month)
+        .map((date) => date.getDate())
+        .filter((day) => selected.has(String(day))),
+    }))
+    .filter((group) => group.days.length);
 }
 
 function renderReportPreview() {
@@ -1520,20 +1523,22 @@ async function importData(file) {
 async function importExcelSchedule(file) {
   const entries = await unzipXlsx(await file.arrayBuffer());
   const sharedStrings = parseSharedStrings(textFromEntry(entries, "xl/sharedStrings.xml"));
-  const sheetNames = parseWorkbookSheets(textFromEntry(entries, "xl/workbook.xml"));
+  const sheetNames = parseWorkbookSheets(textFromEntry(entries, "xl/workbook.xml"), textFromEntry(entries, "xl/_rels/workbook.xml.rels"));
   const sheetPath = sheetNames.find((sheet) => /schedule|shift|sheet1/i.test(sheet.name))?.path || "xl/worksheets/sheet1.xml";
   const rows = parseSheetRows(textFromEntry(entries, sheetPath), sharedStrings);
   const importedEmployees = new Set();
   let shiftsImported = 0;
   let activeNames = [];
   let activeCols = [];
+  let activeDateCol = 2;
 
   for (const row of rows) {
     const dateIndex = row.findIndex((value) => normalizeCell(value) === "dates");
     if (dateIndex >= 0) {
       activeNames = [];
       activeCols = [];
-      for (let col = dateIndex + 1; col < row.length; col += 1) {
+      activeDateCol = dateIndex;
+      for (let col = dateIndex + 1; col < Math.max(row.length, dateIndex + 12); col += 1) {
         const name = normalizeImportedEmployee(row[col]);
         if (!name) continue;
         const employee = findOrCreateImportedEmployee(name);
@@ -1544,7 +1549,7 @@ async function importExcelSchedule(file) {
       continue;
     }
 
-    const date = excelDate(row[activeCols.length ? activeCols[0] - 1 : 2]);
+    const date = excelDate(row[activeDateCol]);
     if (!date || !activeNames.length) continue;
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -1557,11 +1562,12 @@ async function importExcelSchedule(file) {
       const parsed = parseImportedShift(row[activeCols[index]]);
       if (!parsed) continue;
       monthData[day][employee] = parsed;
-      shiftsImported += parsed.shift === "00:00-00:00" ? 0 : 1;
+      shiftsImported += hoursFromShift(parsed.shift) > 0 ? 1 : 0;
     }
     state.year = year;
     state.month = month;
   }
+  normalizeMonthData();
   if (!shiftsImported && !importedEmployees.size) throw new Error("No readable Excel shifts found");
   return { shifts: shiftsImported, employees: importedEmployees.size };
 }
@@ -1684,9 +1690,19 @@ function parseSharedStrings(xml) {
   );
 }
 
-function parseWorkbookSheets(xml) {
-  const rels = [...xml.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*r:id="rId(\d+)"[^>]*\/>/g)];
-  return rels.map((match) => ({ name: decodeXml(match[1]), path: `xl/worksheets/sheet${match[2]}.xml` }));
+function parseWorkbookSheets(xml, relsXml = "") {
+  const relationshipPaths = Object.fromEntries(
+    [...relsXml.matchAll(/<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map((match) => [match[1], workbookTargetPath(match[2])]),
+  );
+  return [...xml.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"[^>]*\/>/g)].map((match) => ({
+    name: decodeXml(match[1]),
+    path: relationshipPaths[match[2]] || `xl/worksheets/sheet${match[2].replace(/\D/g, "")}.xml`,
+  }));
+}
+
+function workbookTargetPath(target) {
+  const clean = String(target ?? "").replace(/^\/+/, "");
+  return clean.startsWith("xl/") ? clean : `xl/${clean}`;
 }
 
 function parseSheetRows(xml, sharedStrings) {
