@@ -1792,7 +1792,7 @@ async function importData(file) {
       logHistory(`Imported Excel ${file.name}`);
       saveState(true);
       render();
-      toast(`Imported ${result.shifts} shifts`);
+      toast(`Imported ${result.days} days and ${result.shifts} shifts`);
     } catch (error) {
       toast(error.message || "Could not import Excel");
     }
@@ -1811,54 +1811,62 @@ async function importData(file) {
 
 async function importExcelSchedule(file) {
   const entries = await unzipXlsx(await file.arrayBuffer());
-  const sharedStrings = parseSharedStrings(textFromEntry(entries, "xl/sharedStrings.xml"));
+  const sharedStrings = parseSharedStrings(textFromEntry(entries, "xl/sharedStrings.xml", ""));
   const sheetNames = parseWorkbookSheets(textFromEntry(entries, "xl/workbook.xml"), textFromEntry(entries, "xl/_rels/workbook.xml.rels"));
-  const sheetPath = sheetNames.find((sheet) => /schedule|shift|sheet1/i.test(sheet.name))?.path || "xl/worksheets/sheet1.xml";
-  const rows = parseSheetRows(textFromEntry(entries, sheetPath), sharedStrings);
+  const worksheets = sheetNames.length ? sheetNames : [{ name: "Sheet1", path: "xl/worksheets/sheet1.xml" }];
+  const fallbackYear = importedYearHint(`${file.name} ${worksheets.map((sheet) => sheet.name).join(" ")}`);
   const importedEmployees = new Set();
+  const importedDays = new Set();
   let shiftsImported = 0;
-  let activeNames = [];
-  let activeCols = [];
-  let activeDateCol = 2;
 
-  for (const row of rows) {
-    const dateIndex = row.findIndex((value) => normalizeCell(value) === "dates");
-    if (dateIndex >= 0) {
-      activeNames = [];
-      activeCols = [];
-      activeDateCol = dateIndex;
-      for (let col = dateIndex + 1; col < Math.max(row.length, dateIndex + 12); col += 1) {
-        const name = normalizeImportedEmployee(row[col]);
-        if (!name) continue;
-        const employee = findOrCreateImportedEmployee(name);
-        activeNames.push(employee);
-        activeCols.push(col);
-        importedEmployees.add(employee);
+  for (const sheet of worksheets) {
+    if (!entries.has(sheet.path)) continue;
+    const rows = parseSheetRows(textFromEntry(entries, sheet.path), sharedStrings);
+    let activeNames = [];
+    let activeCols = [];
+    let activeDateCol = 2;
+    const sheetYear = importedYearHint(sheet.name) || fallbackYear;
+
+    for (const row of rows) {
+      const dateIndex = row.findIndex((value) => /^(dates?|date)$/i.test(String(value ?? "").trim()));
+      if (dateIndex >= 0) {
+        activeNames = [];
+        activeCols = [];
+        activeDateCol = dateIndex;
+        for (let col = dateIndex + 1; col < Math.max(row.length, dateIndex + 32); col += 1) {
+          const name = normalizeImportedEmployee(row[col]);
+          if (!name) continue;
+          const employee = findOrCreateImportedEmployee(name);
+          activeNames.push(employee);
+          activeCols.push(col);
+          importedEmployees.add(employee);
+        }
+        continue;
       }
-      continue;
-    }
 
-    const date = excelDate(row[activeDateCol]);
-    if (!date || !activeNames.length) continue;
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    if (year < 2026 || year > 2030) continue;
-    const monthData = ensureMonth(year, month);
-    const day = date.getDate();
-    monthData[day] ??= {};
-    for (let index = 0; index < activeCols.length; index += 1) {
-      const employee = activeNames[index];
-      const parsed = parseImportedShift(row[activeCols[index]]);
-      if (!parsed) continue;
-      monthData[day][employee] = importedEntry(parsed);
-      shiftsImported += hoursFromShift(parsed.shift) > 0 ? 1 : 0;
+      const date = excelDate(row[activeDateCol], sheetYear);
+      if (!date || !activeNames.length) continue;
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      if (year < 2026 || year > 2030) continue;
+      const monthData = ensureMonth(year, month);
+      const day = date.getDate();
+      monthData[day] ??= {};
+      for (let index = 0; index < activeCols.length; index += 1) {
+        const employee = activeNames[index];
+        const parsed = parseImportedShift(row[activeCols[index]]);
+        if (!parsed) continue;
+        monthData[day][employee] = importedEntry(parsed);
+        if (hoursFromShift(parsed.shift) > 0) shiftsImported += 1;
+      }
+      importedDays.add(`${year}-${month}-${day}`);
+      state.year = year;
+      state.month = month;
     }
-    state.year = year;
-    state.month = month;
   }
   normalizeMonthData();
-  if (!shiftsImported && !importedEmployees.size) throw new Error("No readable Excel shifts found");
-  return { shifts: shiftsImported, employees: importedEmployees.size };
+  if (!importedDays.size || !importedEmployees.size) throw new Error("No readable Excel schedule found");
+  return { shifts: shiftsImported, employees: importedEmployees.size, days: importedDays.size };
 }
 
 function importedEntry(parsed) {
@@ -1932,11 +1940,31 @@ function isYloLocation(value) {
     .includes("ylo");
 }
 
-function excelDate(value) {
+function excelDate(value, fallbackYear = state.year) {
   if (value instanceof Date) return value;
   const serial = Number(value);
-  if (!Number.isFinite(serial) || serial < 30000) return null;
-  return new Date(Math.round((serial - 25569) * 86400 * 1000));
+  if (Number.isFinite(serial) && serial >= 30000) return new Date(Math.round((serial - 25569) * 86400 * 1000));
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const monthPattern = monthNames.map((name) => name.slice(0, 3)).join("|");
+  const monthNameMatch = raw.match(new RegExp(`(\\d{1,2})[.\\-/ ]*(${monthPattern})[a-z]*[.\\-/ ]*(\\d{4})?`, "i"));
+  if (monthNameMatch) {
+    const month = monthNames.findIndex((name) => name.toLowerCase().startsWith(monthNameMatch[2].toLowerCase().slice(0, 3)));
+    const year = Number(monthNameMatch[3] || fallbackYear || state.year);
+    return month >= 0 ? new Date(year, month, Number(monthNameMatch[1])) : null;
+  }
+  const numericMatch = raw.match(/(\d{1,2})[.\/-](\d{1,2})(?:[.\/-](\d{2,4}))?/);
+  if (numericMatch) {
+    const yearPart = numericMatch[3] ? Number(numericMatch[3]) : Number(fallbackYear || state.year);
+    const year = yearPart < 100 ? 2000 + yearPart : yearPart;
+    return new Date(year, Number(numericMatch[2]) - 1, Number(numericMatch[1]));
+  }
+  return null;
+}
+
+function importedYearHint(value) {
+  const match = String(value ?? "").match(/\b(20[2-3]\d)\b/);
+  return match ? Number(match[1]) : state.year;
 }
 
 async function unzipXlsx(buffer) {
@@ -1979,9 +2007,12 @@ async function inflateRaw(bytes) {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-function textFromEntry(entries, path) {
+function textFromEntry(entries, path, fallback = null) {
   const bytes = entries.get(path);
-  if (!bytes) throw new Error(`Excel file is missing ${path}`);
+  if (!bytes) {
+    if (fallback !== null) return fallback;
+    throw new Error(`Excel file is missing ${path}`);
+  }
   return new TextDecoder().decode(bytes);
 }
 
