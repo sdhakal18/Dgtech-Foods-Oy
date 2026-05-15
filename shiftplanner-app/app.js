@@ -57,6 +57,7 @@ const hadSavedState = Boolean(localStorage.getItem("dgtech-shiftplanner-v1"));
 let sessionToken = localStorage.getItem(sessionKey) || "";
 let serverReady = false;
 let bootstrapping = true;
+let employeeRequestDay = "";
 
 const initialState = {
   year: 2026,
@@ -755,6 +756,10 @@ function renderShell() {
 }
 
 function renderSchedule() {
+  if (isEmployee()) {
+    renderEmployeeSchedule();
+    return;
+  }
   const filter = el.employeeFilter.value.trim().toLowerCase();
   const employees = visibleEmployees().filter((employee) => employee.toLowerCase().includes(filter));
   const rows = [];
@@ -794,6 +799,87 @@ function renderSchedule() {
 
   rows.push("</tbody></table>");
   el.scheduleTable.innerHTML = rows.join("");
+}
+
+function renderEmployeeSchedule() {
+  const employee = state.activeEmployee;
+  const data = ensureMonth();
+  const rows = [];
+  rows.push(`<div class="employee-week-list">`);
+  for (const block of duplicateBlocks("week", state.year, state.month)) {
+    const visibleDates = block.dates.filter((date) => date.getFullYear() === state.year && date.getMonth() === state.month);
+    if (!visibleDates.length) continue;
+    const weekTotal = visibleDates.reduce((sum, date) => sum + hoursForEntry(data[date.getDate()]?.[employee]), 0);
+    const isOpen = visibleDates.some((date) => !data[date.getDate()]?.[employee]?.published);
+    rows.push(`
+      <article class="employee-week-card">
+        <header>
+          <h3>Week ${dayInfo(visibleDates[0].getDate()).isoWeek} / ${state.year}</h3>
+          <span>${isOpen ? "OPEN" : "ACTUAL SHIFTS"}<i></i></span>
+        </header>
+        <div class="employee-days">
+    `);
+    for (const date of visibleDates) {
+      const day = date.getDate();
+      const entry = data[day]?.[employee];
+      const info = dayInfo(day);
+      rows.push(`
+        <div class="employee-day-row ${info.isRedDay ? "employee-red-day" : ""}">
+          <div class="employee-date">${employeeDayLabel(date)}</div>
+          <div class="employee-shift-area">${employeeShiftCard(day, employee, entry)}</div>
+        </div>
+      `);
+      if (String(employeeRequestDay) === String(day) && entry && !entry.published) {
+        rows.push(employeeRequestPanel(day, employee, entry));
+      }
+    }
+    rows.push(`
+        </div>
+        <footer><span>Total</span><strong>${formatDuration(weekTotal)}</strong></footer>
+      </article>
+    `);
+  }
+  rows.push(`</div>`);
+  el.scheduleTable.innerHTML = rows.join("");
+}
+
+function employeeShiftCard(day, employee, entry) {
+  if (!entry) return "";
+  if (entry.published) {
+    const label = entry.shift === "Sick leave" ? `Sick leave (${entry.paidShift || entry.publishedShift || "paid shift"})` : reportShiftText(entry);
+    return `<button class="employee-shift-card" type="button" data-open-entry="${day}"><span>${esc(label)}</span><b>Locked</b></button>`;
+  }
+  if (entry.shift === "Wish OFF") {
+    return `<button class="employee-shift-card wish-card" type="button" data-request-day="${day}"><span>Wish OFF</span><b>+</b></button>`;
+  }
+  return `<button class="employee-add-shift" type="button" data-request-day="${day}" aria-label="Request wish off for ${employee} on day ${day}">+</button>`;
+}
+
+function employeeRequestPanel(day, employee, entry) {
+  return `
+    <div class="employee-request-panel">
+      <div class="request-times">
+        <label>Start<input value="12:00 AM" readonly /></label>
+        <label>End<input value="12:00 AM" readonly /></label>
+        <label>Total<input value="0:00" readonly /></label>
+      </div>
+      <label>Workplace<select disabled><option>${esc(entry.location || state.locations[0] || "")}</option></select></label>
+      <label>Working hour type<select data-request-type="${day}"><option value="Wish OFF">Wish OFF</option></select></label>
+      <label>Information<textarea data-request-comment="${day}" rows="3" placeholder="Comment">${esc(entry.comment)}</textarea></label>
+      <button class="primary-button" type="button" data-save-request="${day}" data-request-employee="${encodeURIComponent(employee)}">Save request</button>
+    </div>
+  `;
+}
+
+function employeeDayLabel(date) {
+  return `${date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()} ${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}.`;
+}
+
+function formatDuration(hours) {
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = String(totalMinutes % 60).padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 function scheduleCell(day, employee, entry) {
@@ -1304,6 +1390,20 @@ function saveEmployeeEntryRequest(day, employee, entry) {
   }).catch((error) => toast(error.message));
 }
 
+function saveEmployeeWishRequest(day, employee) {
+  if (!isEmployee()) return;
+  const entry = ensureMonth()[day]?.[employee];
+  if (!entry || entry.published || employee !== state.activeEmployee) return;
+  const comment = document.querySelector(`[data-request-comment="${CSS.escape(String(day))}"]`)?.value.trim() ?? "";
+  entry.shift = "Wish OFF";
+  entry.comment = comment;
+  employeeRequestDay = "";
+  saveEmployeeEntryRequest(day, employee, entry);
+  saveState(true);
+  render();
+  toast("Wish OFF requested");
+}
+
 function togglePublish(day, employee) {
   if (!isEmployer()) return;
   const entry = ensureMonth()[day]?.[employee];
@@ -1750,7 +1850,7 @@ async function importExcelSchedule(file) {
       const employee = activeNames[index];
       const parsed = parseImportedShift(row[activeCols[index]]);
       if (!parsed) continue;
-      monthData[day][employee] = parsed;
+      monthData[day][employee] = importedEntry(parsed);
       shiftsImported += hoursFromShift(parsed.shift) > 0 ? 1 : 0;
     }
     state.year = year;
@@ -1759,6 +1859,18 @@ async function importExcelSchedule(file) {
   normalizeMonthData();
   if (!shiftsImported && !importedEmployees.size) throw new Error("No readable Excel shifts found");
   return { shifts: shiftsImported, employees: importedEmployees.size };
+}
+
+function importedEntry(parsed) {
+  const hasShift = parsed.shift !== "00:00-00:00";
+  return {
+    shift: parsed.shift,
+    location: parsed.location,
+    comment: "",
+    published: hasShift,
+    publishedShift: hasShift ? parsed.shift : "",
+    paidShift: "",
+  };
 }
 
 function normalizeCell(value) {
@@ -2126,6 +2238,19 @@ document.addEventListener("click", (event) => {
   if (publishButton) {
     const employee = decodeURIComponent(publishButton.dataset.publishEmployee);
     togglePublish(publishButton.dataset.publishDay, employee);
+    return;
+  }
+
+  const requestButton = event.target.closest("[data-request-day]");
+  if (requestButton) {
+    employeeRequestDay = String(requestButton.dataset.requestDay);
+    renderSchedule();
+    return;
+  }
+
+  const saveRequestButton = event.target.closest("[data-save-request]");
+  if (saveRequestButton) {
+    saveEmployeeWishRequest(saveRequestButton.dataset.saveRequest, decodeURIComponent(saveRequestButton.dataset.requestEmployee));
     return;
   }
 

@@ -533,6 +533,174 @@ input {
   min-height: 360px;
 }
 
+.employee-mode .schedule-table {
+  max-height: none;
+  min-height: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.employee-week-list {
+  display: grid;
+  gap: 16px;
+}
+
+.employee-week-card {
+  overflow: hidden;
+  border: 1px solid #d7dbe5;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 32, 55, 0.12);
+}
+
+.employee-week-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #d7dbe5;
+}
+
+.employee-week-card h3 {
+  margin: 0;
+  color: #5f6470;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.employee-week-card header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #5f6470;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.employee-week-card header i {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffad8a;
+}
+
+.employee-days {
+  display: grid;
+}
+
+.employee-day-row {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  min-height: 76px;
+  border-bottom: 1px solid #eceff3;
+  background: linear-gradient(90deg, #ffffff 0 132px, #f3f4f6 132px 146px, #ffffff 146px);
+}
+
+.employee-red-day .employee-date {
+  color: #b4232f;
+}
+
+.employee-date {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  color: #1d2430;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.employee-shift-area {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 9px 16px;
+}
+
+.employee-shift-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 220px;
+  min-height: 56px;
+  border: 1px solid #e8eaef;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 3px 6px rgba(15, 32, 55, 0.16);
+  color: #1d2430;
+  font: inherit;
+  font-size: 18px;
+}
+
+.employee-shift-card b {
+  color: #6b7280;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.employee-shift-card.wish-card {
+  color: #4b3bb2;
+}
+
+.employee-add-shift {
+  width: 46px;
+  height: 46px;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.employee-request-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-bottom: 1px solid #d7dbe5;
+  background: #eeeeef;
+}
+
+.employee-request-panel label {
+  display: grid;
+  gap: 7px;
+  color: #343945;
+  font-weight: 700;
+}
+
+.request-times {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.employee-request-panel input,
+.employee-request-panel select,
+.employee-request-panel textarea {
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 12px;
+  color: #1d2430;
+  font: inherit;
+}
+
+.employee-week-card footer {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 14px 22px;
+  color: #1d2430;
+  font-size: 18px;
+}
+
+.employee-week-card footer strong {
+  font-size: 20px;
+}
+
 .schedule-table table {
   border-collapse: separate;
   border-spacing: 0;
