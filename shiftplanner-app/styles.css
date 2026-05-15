@@ -883,18 +883,31 @@ th {
 }
 
 .matrix-report {
-  font-size: 11px;
+  font-size: 12px;
+  width: max-content;
+  min-width: 100%;
 }
 
 .matrix-report th,
 .matrix-report td {
-  min-width: 76px;
+  height: 24px;
+  min-width: 118px;
+  padding: 3px 6px;
+  text-align: center;
+  vertical-align: middle;
   white-space: normal;
 }
 
 .matrix-report th:first-child,
 .matrix-report td:first-child {
-  min-width: 150px;
+  min-width: 48px;
+}
+
+.matrix-report th:nth-child(2),
+.matrix-report td:nth-child(2),
+.matrix-report th:nth-child(3),
+.matrix-report td:nth-child(3) {
+  min-width: 86px;
 }
 
 .matrix-report td small,
@@ -903,6 +916,25 @@ th {
   margin-top: 2px;
   color: var(--muted);
   font-size: 10px;
+}
+
+.matrix-report thead th {
+  background: #1ca1d0;
+  border-color: #111827;
+  color: #000000;
+  font-weight: 900;
+}
+
+.matrix-report .report-total-row td {
+  background: #49a52c;
+  border-color: #111827;
+  color: #000000;
+  font-weight: 900;
+}
+
+.matrix-report .report-period-row td {
+  background: #2f7d1d;
+  color: #ffffff;
 }
 
 .report-week-total,

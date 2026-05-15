@@ -1016,50 +1016,42 @@ function buildReportHtml(config = getReportConfig()) {
     }),
   );
   const reportEmployees = visibleEmployees.length ? visibleEmployees : [];
-  const stats = getStats({ employees: reportEmployees, days: config.days, location: config.location });
   const weekGroups = reportWeekGroups(config.days);
-  const reportHead = weekGroups
-    .map((group) => `${group.days.map((day) => `<th class="${dayInfo(day).isRedDay ? "report-red-day-cell" : ""}">${day}<small>${esc(dayInfo(day).label)}</small></th>`).join("")}<th class="report-week-total-head">Week ${group.week}<br>Total</th>`)
-    .join("");
-  const reportRows = reportEmployees
-    .map((employee) => {
-      let periodTotal = 0;
-      const cells = weekGroups
-        .map((group) => {
-          let weekTotal = 0;
-          const dayCells = group.days
+  const periodLabel = config.type === "threeWeeks" ? "3 Week Total" : config.type === "month" ? "Month Total" : "Period Total";
+  const employeeHead = reportEmployees.map((employee) => `<th>${esc(employee)}</th>`).join("");
+  const reportRows = reportEmployees.length
+    ? weekGroups
+        .map((group) =>
+          `${group.days
             .map((day) => {
-              const entry = data[day]?.[employee];
-              const hours = entry && (!config.location || entry.location === config.location) ? hoursFromShift(entry.shift) : 0;
-              weekTotal += hours;
-              periodTotal += hours;
-              const text = hours > 0 ? `${esc(entry.shift)}<small>${esc(entry.location)}</small>` : "";
-              return `<td class="${dayInfo(day).isRedDay ? "report-red-day-cell" : ""}">${text}</td>`;
+              const info = dayInfo(day);
+              const dayCells = reportEmployees
+                .map((employee) => {
+                  const entry = data[day]?.[employee];
+                  if (!entry || (config.location && entry.location !== config.location) || hoursFromShift(entry.shift) <= 0) return "<td></td>";
+                  return `<td>${esc(reportShiftText(entry))}</td>`;
+                })
+                .join("");
+              return `<tr class="${info.isRedDay ? "report-red-day" : ""}"><td></td><td class="${info.isRedDay ? "report-red-day-cell" : ""}">${esc(reportDayName(day))}</td><td class="${info.isRedDay ? "report-red-day-cell" : ""}">${esc(reportDateLabel(day))}</td>${dayCells}</tr>`;
             })
-            .join("");
-          return `${dayCells}<td class="report-week-total">${formatNumber(weekTotal)}</td>`;
-        })
-        .join("");
-      return `<tr><td class="report-name-cell">${esc(employee)}</td>${cells}<td class="report-period-total">${formatNumber(periodTotal)}</td></tr>`;
-    })
-    .join("");
+            .join("")}${reportWeekTotalRow(group, reportEmployees, config, data)}`,
+        )
+        .join("")
+    : "";
+  const totalRow = reportPeriodTotalRow(reportEmployees, weekGroups, config, data, periodLabel);
 
   return `
     <article class="print-report">
       <header>
         <h1>Dgtech foods Oy</h1>
         <h2>${esc(config.title)}</h2>
-        <p>${esc(config.type)} report generated from shift planner</p>
+        <p>${config.location ? esc(config.location) : "All restaurants"} · ${esc(periodLabel)}</p>
       </header>
-      <section class="report-kpis">
-        <div><span>Total hours</span><strong>${formatNumber(stats.total)}</strong></div>
-        <div><span>Working shifts</span><strong>${stats.shiftsWorked}</strong></div>
-        ${state.locations.map((loc) => `<div><span>${esc(loc)}</span><strong>${formatNumber(stats.locationStats[loc]?.total ?? 0)}</strong></div>`).join("")}
-      </section>
-      <h3>Shift report</h3>
       <table class="matrix-report">
-        <thead><tr><th>Employee</th>${reportHead}<th>Period<br>Total</th></tr></thead>
-        <tbody>${reportRows || `<tr><td colspan="${weekGroups.reduce((sum, group) => sum + group.days.length + 1, 2)}">No employees with worked shifts.</td></tr>`}</tbody>
+        <thead>
+          <tr><th></th><th>Days</th><th>Dates</th>${employeeHead}</tr>
+        </thead>
+        <tbody>${reportRows || `<tr><td colspan="${reportEmployees.length + 3}">No employees with worked shifts.</td></tr>`}${reportRows ? totalRow : ""}</tbody>
       </table>
       <footer class="report-footer">
         <p>© 2026 Dgtech foods oy. All Rights Reserved.</p>
@@ -1067,6 +1059,49 @@ function buildReportHtml(config = getReportConfig()) {
       </footer>
     </article>
   `;
+}
+
+function reportWeekTotalRow(group, employees, config, data) {
+  const cells = employees
+    .map((employee) => {
+      const total = group.days.reduce((sum, day) => {
+        const entry = data[day]?.[employee];
+        if (!entry || (config.location && entry.location !== config.location)) return sum;
+        return sum + hoursFromShift(entry.shift);
+      }, 0);
+      return `<td>${formatNumber(total)}</td>`;
+    })
+    .join("");
+  return `<tr class="report-total-row"><td></td><td>Total</td><td></td>${cells}</tr>`;
+}
+
+function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) {
+  const allDays = weekGroups.flatMap((group) => group.days);
+  const cells = employees
+    .map((employee) => {
+      const total = allDays.reduce((sum, day) => {
+        const entry = data[day]?.[employee];
+        if (!entry || (config.location && entry.location !== config.location)) return sum;
+        return sum + hoursFromShift(entry.shift);
+      }, 0);
+      return `<td>${formatNumber(total)}</td>`;
+    })
+    .join("");
+  return `<tr class="report-total-row report-period-row"><td></td><td>${esc(periodLabel)}</td><td></td>${cells}</tr>`;
+}
+
+function reportShiftText(entry) {
+  if (entry.location === "Ylöjärvi") return `${entry.shift}(Ylo)`;
+  if (entry.location && entry.location !== "Koivistonkylä") return `${entry.shift}(${entry.location})`;
+  return entry.shift;
+}
+
+function reportDayName(day) {
+  return new Date(state.year, state.month, day).toLocaleDateString("en-US", { weekday: "long" });
+}
+
+function reportDateLabel(day) {
+  return new Date(state.year, state.month, day).toLocaleDateString("en-US", { day: "numeric", month: "short" }).replace(" ", "-");
 }
 
 function reportWeekGroups(days) {
