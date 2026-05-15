@@ -1815,6 +1815,7 @@ async function importExcelSchedule(file) {
   const sheetNames = parseWorkbookSheets(textFromEntry(entries, "xl/workbook.xml"), textFromEntry(entries, "xl/_rels/workbook.xml.rels"));
   const worksheets = sheetNames.length ? sheetNames : [{ name: "Sheet1", path: "xl/worksheets/sheet1.xml" }];
   const fallbackYear = importedYearHint(`${file.name} ${worksheets.map((sheet) => sheet.name).join(" ")}`);
+  const fallbackMonth = importedMonthHint(file.name);
   const importedEmployees = new Set();
   const importedDays = new Set();
   let shiftsImported = 0;
@@ -1826,6 +1827,7 @@ async function importExcelSchedule(file) {
     let activeCols = [];
     let activeDateCol = 2;
     const sheetYear = importedYearHint(sheet.name) || fallbackYear;
+    const sheetMonth = importedMonthHint(`${sheet.name} ${rows.slice(0, 6).flat().join(" ")}`) ?? fallbackMonth ?? state.month;
 
     for (const row of rows) {
       const dateIndex = row.findIndex((value) => /^(dates?|date)$/i.test(String(value ?? "").trim()));
@@ -1844,7 +1846,7 @@ async function importExcelSchedule(file) {
         continue;
       }
 
-      const date = excelDate(row[activeDateCol], sheetYear);
+      const date = excelDate(row[activeDateCol], sheetYear, sheetMonth);
       if (!date || !activeNames.length) continue;
       const year = date.getFullYear();
       const month = date.getMonth();
@@ -1940,10 +1942,13 @@ function isYloLocation(value) {
     .includes("ylo");
 }
 
-function excelDate(value, fallbackYear = state.year) {
+function excelDate(value, fallbackYear = state.year, fallbackMonth = state.month) {
   if (value instanceof Date) return value;
   const serial = Number(value);
   if (Number.isFinite(serial) && serial >= 30000) return new Date(Math.round((serial - 25569) * 86400 * 1000));
+  if (Number.isFinite(serial) && serial >= 1 && serial <= 31 && Number.isInteger(serial) && fallbackMonth !== null) {
+    return new Date(Number(fallbackYear || state.year), fallbackMonth, serial);
+  }
   const raw = String(value ?? "").trim();
   if (!raw) return null;
   const monthPattern = monthNames.map((name) => name.slice(0, 3)).join("|");
@@ -1965,6 +1970,16 @@ function excelDate(value, fallbackYear = state.year) {
 function importedYearHint(value) {
   const match = String(value ?? "").match(/\b(20[2-3]\d)\b/);
   return match ? Number(match[1]) : state.year;
+}
+
+function importedMonthHint(value) {
+  const text = String(value ?? "").toLowerCase();
+  const index = monthNames.findIndex((name) => {
+    const full = name.toLowerCase();
+    const short = full.slice(0, 3);
+    return new RegExp(`\\b${full}\\b|\\b${short}\\b`).test(text);
+  });
+  return index >= 0 ? index : null;
 }
 
 async function unzipXlsx(buffer) {
