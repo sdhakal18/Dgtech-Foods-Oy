@@ -994,6 +994,18 @@ function canSeeEntry(employee, entry) {
   return employee === state.activeEmployee && entry?.shift === "Wish OFF";
 }
 
+function applyShiftToEntry(entry, nextValue) {
+  const previousShift = entry.shift;
+  if (nextValue === "Sick leave" && previousShift !== "Sick leave") {
+    entry.paidShift = entry.publishedShift || (hoursFromShift(previousShift) > 0 ? previousShift : "");
+  }
+  if (nextValue !== "Sick leave") entry.paidShift = "";
+  entry.shift = nextValue || "00:00-00:00";
+  if (isEmployer() && entry.published) {
+    entry.publishedShift = entry.shift === "Sick leave" ? entry.paidShift || entry.publishedShift : entry.shift;
+  }
+}
+
 function renderEmployeeSummary() {
   const employees = visibleEmployees();
   const { employeeStats } = getStats({ employees });
@@ -1418,12 +1430,7 @@ function updateEntry(target) {
       toast("Choose a May shift option, OFF, Wish OFF, or Sick leave");
       return;
     }
-    if (nextValue === "Sick leave" && entry.shift !== "Sick leave") {
-      entry.paidShift = entry.publishedShift || (hoursFromShift(entry.shift) > 0 ? entry.shift : "");
-    }
-    if (nextValue !== "Sick leave") entry.paidShift = "";
-    entry[field] = nextValue || "00:00-00:00";
-    if (isEmployer() && entry.published && entry.shift !== "Sick leave") entry.publishedShift = entry.shift;
+    applyShiftToEntry(entry, nextValue);
   } else {
     entry[field] = field === "comment" ? target.value.trim() : target.value;
   }
@@ -2320,12 +2327,7 @@ document.addEventListener("input", (event) => {
     const normalized = normalizeShift(event.target.value);
     const canLiveSave = isEmployer() || ["Wish OFF", "00:00-00:00"].includes(normalized);
     if (valid && canLiveSave && (nonWorkingShifts.includes(normalized) || shifts.includes(normalized))) {
-      if (normalized === "Sick leave" && entry.shift !== "Sick leave") {
-        entry.paidShift = entry.publishedShift || (hoursFromShift(entry.shift) > 0 ? entry.shift : "");
-      }
-      if (normalized !== "Sick leave") entry.paidShift = "";
-      entry.shift = normalized || "00:00-00:00";
-      if (isEmployer() && entry.published && entry.shift !== "Sick leave") entry.publishedShift = entry.shift;
+      applyShiftToEntry(entry, normalized);
       saveState();
       refreshCalculatedViews();
     }
