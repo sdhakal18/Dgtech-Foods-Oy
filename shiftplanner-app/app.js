@@ -72,6 +72,7 @@ const initialState = {
     employee: employeesDefault[0],
     location: locationsDefault[0],
     week: "",
+    twoWeek: "",
     threeWeek: "1",
   },
   duplicate: {
@@ -131,6 +132,7 @@ const el = {
   reportEmployee: document.querySelector("#reportEmployee"),
   reportLocation: document.querySelector("#reportLocation"),
   reportWeek: document.querySelector("#reportWeek"),
+  reportTwoWeek: document.querySelector("#reportTwoWeek"),
   reportThreeWeek: document.querySelector("#reportThreeWeek"),
   reportPreview: document.querySelector("#reportPreview"),
   employeeFilter: document.querySelector("#employeeFilter"),
@@ -537,11 +539,12 @@ function daysForPeriod(period = "month", value = "") {
   if (period === "week") {
     return allDays.filter((day) => String(dayInfo(day).isoWeek) === String(value));
   }
-  if (period === "threeWeeks") {
-    const block = Number(value || 1);
-    const start = (block - 1) * 21 + 1;
-    const end = Math.min(daysInMonth(), start + 20);
-    return allDays.filter((day) => day >= start && day <= end);
+  if (period === "twoWeeks" || period === "threeWeeks") {
+    const blocks = duplicateBlocks(period, state.year, state.month);
+    const block = blocks.find((item) => item.value === value) ?? blocks[0];
+    return (block?.dates ?? [])
+      .filter((date) => date.getFullYear() === state.year && date.getMonth() === state.month)
+      .map((date) => date.getDate());
   }
   return allDays;
 }
@@ -574,12 +577,12 @@ function duplicateBlocks(period, year, month) {
     const dates = dateRange(firstDay, daysInSpecificMonth(year, month));
     return [{ label: "Full month", value: "month", dates }];
   }
-  const blockLength = period === "threeWeeks" ? 21 : 7;
+  const blockLength = period === "threeWeeks" ? 21 : period === "twoWeeks" ? 14 : 7;
   const blocks = [];
   for (let start = mondayOnOrBefore(firstDay), block = 1; start <= lastDay; start = addDays(start, blockLength), block += 1) {
     const dates = dateRange(start, blockLength);
     if (!blockTouchesMonth(dates, year, month)) continue;
-    const prefix = period === "threeWeeks" ? `3 weeks ${block}` : `Week ${block}`;
+    const prefix = period === "threeWeeks" ? `3 weeks ${block}` : period === "twoWeeks" ? `2 weeks ${block}` : `Week ${block}`;
     blocks.push({
       label: `${prefix}: ${formatShortDate(dates[0])}-${formatShortDate(dates.at(-1))}`,
       value: dateKey(dates[0]),
@@ -701,6 +704,7 @@ function renderReportSelectors() {
       ? [
           ["month", "My month"],
           ["week", "My week"],
+          ["twoWeeks", "My 2-week period"],
           ["threeWeeks", "My 3-week period"],
         ]
       : [
@@ -708,6 +712,7 @@ function renderReportSelectors() {
           ["employee", "Employee"],
           ["restaurant", "Restaurant"],
           ["week", "One week"],
+          ["twoWeeks", "Two weeks"],
           ["threeWeeks", "Three weeks"],
         ];
   if (!reportTypes.some(([value]) => value === state.report.type)) state.report.type = "month";
@@ -728,16 +733,13 @@ function renderReportSelectors() {
   });
   el.reportWeek.value = String(state.report.week);
 
-  const blocks = [
-    { label: "Days 1-21", value: "1" },
-    { label: `Days 22-${daysInMonth()}`, value: "2" },
-  ];
-  el.reportThreeWeek.innerHTML = "";
-  for (const block of blocks) {
-    const option = new Option(block.label, block.value);
-    option.selected = block.value === String(state.report.threeWeek);
-    el.reportThreeWeek.append(option);
-  }
+  const twoWeekBlocks = duplicateBlocks("twoWeeks", state.year, state.month);
+  if (!twoWeekBlocks.some((block) => block.value === state.report.twoWeek)) state.report.twoWeek = twoWeekBlocks[0]?.value ?? "";
+  el.reportTwoWeek.innerHTML = twoWeekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.report.twoWeek ? "selected" : ""}>${esc(block.label)}</option>`).join("");
+
+  const threeWeekBlocks = duplicateBlocks("threeWeeks", state.year, state.month);
+  if (!threeWeekBlocks.some((block) => block.value === state.report.threeWeek)) state.report.threeWeek = threeWeekBlocks[0]?.value ?? "";
+  el.reportThreeWeek.innerHTML = threeWeekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.report.threeWeek ? "selected" : ""}>${esc(block.label)}</option>`).join("");
 }
 
 function renderQuickDuplicateControls() {
@@ -1141,7 +1143,7 @@ function renderDuplicateControls() {
 }
 
 function getReportConfig() {
-  const type = isEmployee() && state.report.type !== "week" && state.report.type !== "threeWeeks" ? "employee" : state.report.type;
+  const type = isEmployee() && !["week", "twoWeeks", "threeWeeks"].includes(state.report.type) ? "employee" : state.report.type;
   let title = `${monthNames[state.month]} ${state.year}`;
   let employees = [...state.employees];
   let location = "";
@@ -1158,6 +1160,13 @@ function getReportConfig() {
   if (type === "week") {
     days = daysForPeriod("week", state.report.week);
     title = `Week ${state.report.week} - ${title}`;
+    if (isEmployee()) employees = [state.activeEmployee];
+  }
+  if (type === "twoWeeks") {
+    days = daysForPeriod("twoWeeks", state.report.twoWeek);
+    const first = days[0] ?? 1;
+    const last = days.at(-1) ?? daysInMonth();
+    title = `Days ${first}-${last} - ${title}`;
     if (isEmployee()) employees = [state.activeEmployee];
   }
   if (type === "threeWeeks") {
@@ -1185,7 +1194,7 @@ function buildReportHtml(config = getReportConfig()) {
   );
   const reportEmployees = visibleEmployees.length ? visibleEmployees : [];
   const weekGroups = reportWeekGroups(config.days);
-  const periodLabel = config.type === "threeWeeks" ? "3 Week Total" : config.type === "month" ? "Month Total" : "Period Total";
+  const periodLabel = config.type === "threeWeeks" ? "3 Week Total" : config.type === "twoWeeks" ? "2 Week Total" : config.type === "month" ? "Month Total" : "Period Total";
   const employeeHead = reportEmployees.map((employee) => `<th>${esc(employee)}</th>`).join("");
   const reportRows = reportEmployees.length
     ? weekGroups
@@ -1292,6 +1301,7 @@ function renderReportPreview() {
   setReportControl("reportEmployee", type === "employee" && isEmployer());
   setReportControl("reportLocation", type === "restaurant" && isEmployer());
   setReportControl("reportWeek", type === "week");
+  setReportControl("reportTwoWeek", type === "twoWeeks");
   setReportControl("reportThreeWeek", type === "threeWeeks");
 }
 
@@ -1852,8 +1862,7 @@ async function importExcelSchedule(file) {
       monthData[day] ??= {};
       for (let index = 0; index < activeCols.length; index += 1) {
         const employee = activeNames[index];
-        const parsed = parseImportedShift(row[activeCols[index]]);
-        if (!parsed) continue;
+        const parsed = parseImportedShift(row[activeCols[index]]) ?? { shift: "00:00-00:00", location: state.locations[0] ?? "" };
         monthData[day][employee] = importedEntry(parsed);
         if (hoursFromShift(parsed.shift) > 0) shiftsImported += 1;
       }
@@ -2219,11 +2228,12 @@ document.addEventListener("change", (event) => {
     render();
     return;
   }
-  if ([el.reportType, el.reportEmployee, el.reportLocation, el.reportWeek, el.reportThreeWeek].includes(event.target)) {
+  if ([el.reportType, el.reportEmployee, el.reportLocation, el.reportWeek, el.reportTwoWeek, el.reportThreeWeek].includes(event.target)) {
     state.report.type = el.reportType.value;
     state.report.employee = el.reportEmployee.value;
     state.report.location = el.reportLocation.value;
     state.report.week = el.reportWeek.value;
+    state.report.twoWeek = el.reportTwoWeek.value;
     state.report.threeWeek = el.reportThreeWeek.value;
     saveState();
     render();

@@ -29,6 +29,7 @@ function initialState() {
       employee: employeesDefault[0],
       location: locationsDefault[0],
       week: "",
+      twoWeek: "",
       threeWeek: "1",
     },
     duplicate: {

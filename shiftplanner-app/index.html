@@ -125,16 +125,6 @@
 
         <section id="scheduleView" class="view-panel active">
           <div class="table-toolbar">
-            <div class="legend">
-              <span class="chip blank">00:00</span>
-              <span class="chip morning">09-14</span>
-              <span class="chip day">09-17</span>
-              <span class="chip afternoon">13-18</span>
-              <span class="chip evening">17-23</span>
-              <span class="chip off">OFF</span>
-              <span class="chip wish">Wish OFF</span>
-              <span class="chip sick">Sick leave</span>
-            </div>
             <input id="employeeFilter" class="filter-input" type="search" placeholder="Filter employee" />
           </div>
           <div class="schedule-duplicate">
@@ -182,6 +172,7 @@
                 <option value="employee">Employee</option>
                 <option value="restaurant">Restaurant</option>
                 <option value="week">One week</option>
+                <option value="twoWeeks">Two weeks</option>
                 <option value="threeWeeks">Three weeks</option>
               </select>
               <label for="reportEmployee">Employee</label>
@@ -190,6 +181,8 @@
               <select id="reportLocation"></select>
               <label for="reportWeek">Week</label>
               <select id="reportWeek"></select>
+              <label for="reportTwoWeek">2-week period</label>
+              <select id="reportTwoWeek"></select>
               <label for="reportThreeWeek">3-week period</label>
               <select id="reportThreeWeek"></select>
               <button id="openReport" class="primary-button" type="button">Open PDF / Print view</button>
