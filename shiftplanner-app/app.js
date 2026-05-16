@@ -404,7 +404,7 @@ function normalizeShift(value) {
 function isValidShift(value) {
   const normalized = normalizeShift(value);
   if (normalized === "" || nonWorkingShifts.includes(normalized)) return true;
-  return shifts.includes(normalized);
+  return shifts.includes(normalized) || /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(normalized);
 }
 
 function hoursForEntry(entry) {
@@ -1431,7 +1431,7 @@ function updateEntry(target) {
     }
     if (!isValidShift(nextValue)) {
       target.classList.add("invalid");
-      toast("Choose a May shift option, OFF, Wish OFF, or Sick leave");
+      toast("Use HH:MM-HH:MM, OFF, Wish OFF, or Sick leave");
       return;
     }
     applyShiftToEntry(entry, nextValue);
@@ -2330,7 +2330,7 @@ document.addEventListener("input", (event) => {
     event.target.classList.toggle("invalid", !valid);
     const normalized = normalizeShift(event.target.value);
     const canLiveSave = isEmployer() || ["Wish OFF", "00:00-00:00"].includes(normalized);
-    if (valid && canLiveSave && (nonWorkingShifts.includes(normalized) || shifts.includes(normalized))) {
+    if (valid && canLiveSave) {
       applyShiftToEntry(entry, normalized);
       saveState();
       refreshCalculatedViews();
