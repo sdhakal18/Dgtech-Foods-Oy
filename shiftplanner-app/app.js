@@ -791,7 +791,7 @@ function renderSchedule() {
         const entry = data[day][employee];
         rows.push(`<td>${scheduleCell(day, employee, entry)}</td>`);
       }
-      rows.push(`<td class="daily-total">${formatNumber(total)}</td></tr>`);
+      rows.push(`<td class="daily-total" data-daily-total="${day}">${formatNumber(total)}</td></tr>`);
     }
     const weeklyEmployeeTotals = employees.map((employee) =>
       block.dates.reduce((sum, date) => {
@@ -801,11 +801,55 @@ function renderSchedule() {
       }, 0),
     );
     const weeklyTotal = weeklyEmployeeTotals.reduce((sum, value) => sum + value, 0);
-    rows.push(`<tr class="week-total-row"><td></td><td>Weekly total</td>${weeklyEmployeeTotals.map((total) => `<td>${formatNumber(total)}</td>`).join("")}<td>${formatNumber(weeklyTotal)}</td></tr>`);
+    rows.push(`<tr class="week-total-row"><td></td><td>Weekly total</td>${employees.map((employee, index) => `<td data-week-total-employee="${encodeURIComponent(employee)}" data-week-total-block="${esc(block.value)}">${formatNumber(weeklyEmployeeTotals[index])}</td>`).join("")}<td data-week-total-block="${esc(block.value)}" data-week-total-all="true">${formatNumber(weeklyTotal)}</td></tr>`);
   }
 
   rows.push("</tbody></table>");
   el.scheduleTable.innerHTML = rows.join("");
+}
+
+function currentScheduleEmployees() {
+  const filter = el.employeeFilter.value.trim().toLowerCase();
+  return visibleEmployees().filter((employee) => employee.toLowerCase().includes(filter));
+}
+
+function refreshScheduleTotals() {
+  if (isEmployee()) return;
+  const data = ensureMonth(state.year, state.month);
+  const employees = currentScheduleEmployees();
+  for (let day = 1; day <= daysInMonth(); day += 1) {
+    const total = employees.reduce((sum, employee) => {
+      const entry = data[day]?.[employee];
+      return canSeeEntry(employee, entry) ? sum + hoursForEntry(entry) : sum;
+    }, 0);
+    document.querySelector(`[data-daily-total="${day}"]`)?.replaceChildren(document.createTextNode(formatNumber(total)));
+  }
+  for (const block of duplicateBlocks("week", state.year, state.month)) {
+    let weeklyTotal = 0;
+    for (const employee of employees) {
+      const employeeTotal = block.dates.reduce((sum, date) => {
+        if (date.getFullYear() !== state.year || date.getMonth() !== state.month) return sum;
+        const entry = dataForDate(date)?.[employee];
+        return canSeeEntry(employee, entry) ? sum + hoursForEntry(entry) : sum;
+      }, 0);
+      weeklyTotal += employeeTotal;
+      document
+        .querySelector(`[data-week-total-block="${CSS.escape(block.value)}"][data-week-total-employee="${CSS.escape(encodeURIComponent(employee))}"]`)
+        ?.replaceChildren(document.createTextNode(formatNumber(employeeTotal)));
+    }
+    document
+      .querySelector(`[data-week-total-block="${CSS.escape(block.value)}"][data-week-total-all="true"]`)
+      ?.replaceChildren(document.createTextNode(formatNumber(weeklyTotal)));
+  }
+}
+
+function refreshCalculatedViews() {
+  renderShell();
+  refreshScheduleTotals();
+  renderEmployeeSummary();
+  renderLocationSummary();
+  renderWeeks();
+  renderReportPreview();
 }
 
 function renderEmployeeSchedule() {
@@ -2283,10 +2327,7 @@ document.addEventListener("input", (event) => {
       entry.shift = normalized || "00:00-00:00";
       if (isEmployer() && entry.published && entry.shift !== "Sick leave") entry.publishedShift = entry.shift;
       saveState();
-      renderShell();
-      renderEmployeeSummary();
-      renderLocationSummary();
-      renderWeeks();
+      refreshCalculatedViews();
     }
   }
 });
