@@ -833,19 +833,23 @@ function refreshScheduleTotals() {
         return canSeeEntry(employee, entry) ? sum + hoursForEntry(entry) : sum;
       }, 0);
       weeklyTotal += employeeTotal;
-      document
-        .querySelector(`[data-week-total-block="${CSS.escape(block.value)}"][data-week-total-employee="${CSS.escape(encodeURIComponent(employee))}"]`)
-        ?.replaceChildren(document.createTextNode(formatNumber(employeeTotal)));
+      findWeekTotalCell(block.value, employee)?.replaceChildren(document.createTextNode(formatNumber(employeeTotal)));
     }
-    document
-      .querySelector(`[data-week-total-block="${CSS.escape(block.value)}"][data-week-total-all="true"]`)
-      ?.replaceChildren(document.createTextNode(formatNumber(weeklyTotal)));
+    findWeekTotalCell(block.value)?.replaceChildren(document.createTextNode(formatNumber(weeklyTotal)));
   }
+}
+
+function findWeekTotalCell(blockValue, employee = "") {
+  return [...document.querySelectorAll("[data-week-total-block]")].find((cell) => {
+    if (cell.dataset.weekTotalBlock !== blockValue) return false;
+    if (!employee) return cell.dataset.weekTotalAll === "true";
+    return cell.dataset.weekTotalEmployee === encodeURIComponent(employee);
+  });
 }
 
 function refreshCalculatedViews() {
   renderShell();
-  refreshScheduleTotals();
+  renderSchedule();
   renderEmployeeSummary();
   renderLocationSummary();
   renderWeeks();
