@@ -270,6 +270,7 @@ input {
 }
 
 .employee-mode .shift-select,
+.employee-mode .shift-option-select,
 .employee-mode .location-select,
 .employee-mode .comment-input {
   cursor: not-allowed;
@@ -277,6 +278,7 @@ input {
 }
 
 .employee-mode .draft-cell .shift-select,
+.employee-mode .draft-cell .shift-option-select,
 .employee-mode .draft-cell .comment-input {
   cursor: text;
   opacity: 1;
@@ -819,6 +821,7 @@ th {
 }
 
 .shift-select,
+.shift-option-select,
 .location-select {
   width: 152px;
   border: 0;
@@ -827,6 +830,18 @@ th {
   color: inherit;
   font-weight: 700;
   text-align: center;
+}
+
+.shift-editor {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+}
+
+.shift-option-select {
+  background: #ffffff;
+  color: var(--navy);
+  font-size: 12px;
 }
 
 .schedule-cell {
@@ -1700,6 +1715,7 @@ th {
   }
 
   .shift-select,
+  .shift-option-select,
   .location-select,
   .comment-input {
     width: 138px;

@@ -954,18 +954,31 @@ function scheduleCell(day, employee, entry) {
 function shiftSelect(day, employee, entry) {
   const value = entry.shift;
   const locked = canEditEntry(employee, entry, "shift") ? "" : "readonly";
+  const selectDisabled = canEditEntry(employee, entry, "shift") ? "" : "disabled";
   return `
-    <input
-      class="shift-select ${classForShift(value)}"
-      data-day="${day}"
-      data-employee="${encodeURIComponent(employee)}"
-      data-field="shift"
-      value="${esc(value)}"
-      list="shiftOptions"
-      inputmode="text"
-      ${locked}
-      aria-label="${esc(employee)} shift on day ${day}"
-    />
+    <div class="shift-editor">
+      <input
+        class="shift-select ${classForShift(value)}"
+        data-day="${day}"
+        data-employee="${encodeURIComponent(employee)}"
+        data-field="shift"
+        value="${esc(value)}"
+        list="shiftOptions"
+        inputmode="text"
+        ${locked}
+        aria-label="${esc(employee)} shift on day ${day}"
+      />
+      <select
+        class="shift-option-select"
+        data-day="${day}"
+        data-employee="${encodeURIComponent(employee)}"
+        data-field="shift"
+        ${selectDisabled}
+        aria-label="${esc(employee)} shift options on day ${day}"
+      >
+        ${shifts.map((shift) => `<option value="${esc(shift)}" ${shift === value ? "selected" : ""}>${esc(shift)}</option>`).join("")}
+      </select>
+    </div>
   `;
 }
 
