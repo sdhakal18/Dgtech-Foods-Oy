@@ -531,8 +531,16 @@ input {
 }
 
 .schedule-table {
-  max-height: calc(100vh - 260px);
-  min-height: 360px;
+  max-height: calc(100vh - 210px);
+  min-height: calc(100vh - 230px);
+}
+
+body:has(#scheduleView.active) .workspace {
+  padding: 16px;
+}
+
+body:has(#scheduleView.active) .kpi-row {
+  display: none;
 }
 
 .employee-mode .schedule-table {
@@ -1439,7 +1447,7 @@ th {
   }
 
   .schedule-table {
-    max-height: calc(100vh - 270px);
+    max-height: calc(100vh - 210px);
   }
 }
 
@@ -1578,8 +1586,8 @@ th {
   }
 
   .schedule-table {
-    max-height: 72vh;
-    min-height: 420px;
+    max-height: calc(100vh - 190px);
+    min-height: calc(100vh - 210px);
   }
 
   .settings-grid {

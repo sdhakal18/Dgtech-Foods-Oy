@@ -10,7 +10,7 @@ const employeesDefault = [
 ];
 
 const locationsDefault = ["Koivistonkylä", "Ylöjärvi"];
-const shifts = [
+const defaultShifts = [
   "00:00-00:00",
   "07:00-15:00",
   "08:45-20:00",
@@ -37,6 +37,8 @@ const shifts = [
   "Wish OFF",
   "Sick leave",
 ];
+let customShiftOptions = JSON.parse(localStorage.getItem("dgtech-shiftplanner-custom-shifts") || "[]");
+let shifts = shiftOptions();
 const nonWorkingShifts = ["OFF", "Wish OFF", "Sick leave", "00:00-00:00"];
 const monthNames = [
   "January",
@@ -407,6 +409,28 @@ function isValidShift(value) {
   return shifts.includes(normalized) || /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(normalized);
 }
 
+function shiftOptions() {
+  const ordered = [...defaultShifts, ...customShiftOptions].filter(Boolean);
+  return [...new Set(ordered)];
+}
+
+function rememberShiftOption(value) {
+  const normalized = normalizeShift(value);
+  if (!normalized || nonWorkingShifts.includes(normalized) || defaultShifts.includes(normalized) || customShiftOptions.includes(normalized)) return;
+  if (!/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(normalized)) return;
+  customShiftOptions = [...customShiftOptions, normalized].sort();
+  localStorage.setItem("dgtech-shiftplanner-custom-shifts", JSON.stringify(customShiftOptions));
+  shifts = shiftOptions();
+  renderShiftOptions();
+}
+
+function renderShiftOptions() {
+  document.querySelector("#shiftOptions").innerHTML = shifts
+    .filter((shift) => shift !== "00:00-00:00")
+    .map((shift) => `<option value="${shift}"></option>`)
+    .join("");
+}
+
 function hoursForEntry(entry) {
   if (!entry) return 0;
   if (entry.shift === "Sick leave") return hoursFromShift(entry.paidShift || entry.publishedShift);
@@ -662,10 +686,7 @@ function getStats(options = {}) {
 }
 
 function renderSelectors() {
-  document.querySelector("#shiftOptions").innerHTML = shifts
-    .filter((shift) => shift !== "00:00-00:00")
-    .map((shift) => `<option value="${shift}"></option>`)
-    .join("");
+  renderShiftOptions();
 
   el.yearSelect.innerHTML = "";
   for (let year = 2026; year <= 2030; year += 1) {
@@ -849,7 +870,11 @@ function findWeekTotalCell(blockValue, employee = "") {
 
 function refreshCalculatedViews() {
   renderShell();
+  const top = el.scheduleTable.scrollTop;
+  const left = el.scheduleTable.scrollLeft;
   renderSchedule();
+  el.scheduleTable.scrollTop = top;
+  el.scheduleTable.scrollLeft = left;
   renderEmployeeSummary();
   renderLocationSummary();
   renderWeeks();
@@ -1447,6 +1472,7 @@ function updateEntry(target) {
       toast("Use HH:MM-HH:MM, OFF, Wish OFF, or Sick leave");
       return;
     }
+    rememberShiftOption(nextValue);
     applyShiftToEntry(entry, nextValue);
   } else {
     entry[field] = field === "comment" ? target.value.trim() : target.value;
@@ -2335,19 +2361,8 @@ document.addEventListener("change", (event) => {
 document.addEventListener("input", (event) => {
   if (event.target === el.employeeFilter) renderSchedule();
   if (event.target.matches('input[data-field="shift"]')) {
-    const day = event.target.dataset.day;
-    const employee = decodeURIComponent(event.target.dataset.employee);
-    const entry = ensureMonth()[day]?.[employee];
-    if (!entry || !canEditEntry(employee, entry, "shift")) return;
     const valid = isValidShift(event.target.value);
     event.target.classList.toggle("invalid", !valid);
-    const normalized = normalizeShift(event.target.value);
-    const canLiveSave = isEmployer() || ["Wish OFF", "00:00-00:00"].includes(normalized);
-    if (valid && canLiveSave) {
-      applyShiftToEntry(entry, normalized);
-      saveState();
-      refreshCalculatedViews();
-    }
   }
 });
 
