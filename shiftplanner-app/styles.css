@@ -636,19 +636,42 @@ body:has(#scheduleView.active) .kpi-row {
   gap: 12px;
   min-width: 220px;
   min-height: 56px;
+  max-width: 280px;
+  padding: 8px 12px;
   border: 1px solid #e8eaef;
   border-radius: 4px;
   background: #ffffff;
   box-shadow: 0 3px 6px rgba(15, 32, 55, 0.16);
   color: #1d2430;
   font: inherit;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1.15;
 }
 
 .employee-shift-card b {
+  flex: 0 0 auto;
   color: #6b7280;
   font-size: 10px;
   text-transform: uppercase;
+}
+
+.employee-shift-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  text-align: center;
+}
+
+.employee-shift-main,
+.employee-shift-comment {
+  overflow-wrap: anywhere;
+}
+
+.employee-shift-comment {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .employee-shift-card.wish-card {
@@ -1179,6 +1202,8 @@ th {
   text-align: center;
   vertical-align: middle;
   white-space: normal;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .matrix-report th:first-child,
@@ -1199,6 +1224,13 @@ th {
   margin-top: 2px;
   color: var(--muted);
   font-size: 10px;
+}
+
+.matrix-report .report-comment {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #4b5563;
 }
 
 .matrix-report thead th {

@@ -926,13 +926,18 @@ function renderEmployeeSchedule() {
 function employeeShiftCard(day, employee, entry) {
   if (!entry) return "";
   if (entry.published) {
-    const label = entry.shift === "Sick leave" ? `Sick leave (${entry.paidShift || entry.publishedShift || "paid shift"})` : reportShiftText(entry);
-    return `<button class="employee-shift-card" type="button" data-open-entry="${day}"><span>${esc(label)}</span><b>Locked</b></button>`;
+    return `<button class="employee-shift-card" type="button" data-open-entry="${day}"><span class="employee-shift-text">${employeeShiftLabelHtml(entry)}</span><b>Locked</b></button>`;
   }
   if (entry.shift === "Wish OFF") {
-    return `<button class="employee-shift-card wish-card" type="button" data-request-day="${day}"><span>Wish OFF</span><b>+</b></button>`;
+    return `<button class="employee-shift-card wish-card" type="button" data-request-day="${day}"><span class="employee-shift-text">${employeeShiftLabelHtml(entry)}</span><b>+</b></button>`;
   }
   return `<button class="employee-add-shift" type="button" data-request-day="${day}" aria-label="Request wish off for ${employee} on day ${day}">+</button>`;
+}
+
+function employeeShiftLabelHtml(entry) {
+  const label = entry.shift === "Sick leave" ? `Sick leave (${entry.paidShift || entry.publishedShift || "paid shift"})` : reportShiftText(entry);
+  const comment = String(entry.comment || "").trim();
+  return `<span class="employee-shift-main">${esc(label)}</span>${comment ? `<small class="employee-shift-comment">${esc(comment)}</small>` : ""}`;
 }
 
 function employeeRequestPanel(day, employee, entry) {
@@ -1304,7 +1309,7 @@ function buildReportHtml(config = getReportConfig()) {
                 .map((employee) => {
                   const entry = data[day]?.[employee];
                   if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location) || hoursForEntry(entry) <= 0) return "<td></td>";
-                  return `<td>${esc(reportShiftText(entry))}</td>`;
+                  return `<td>${reportShiftHtml(entry)}</td>`;
                 })
                 .join("");
               return `<tr class="${info.isRedDay ? "report-red-day" : ""}"><td></td><td class="${info.isRedDay ? "report-red-day-cell" : ""}">${esc(reportDayName(day))}</td><td class="${info.isRedDay ? "report-red-day-cell" : ""}">${esc(reportDateLabel(day))}</td>${dayCells}</tr>`;
@@ -1370,6 +1375,11 @@ function reportShiftText(entry) {
   if (entry.location === "Ylöjärvi") return `${entry.shift}(Ylo)`;
   if (entry.location && entry.location !== "Koivistonkylä") return `${entry.shift}(${entry.location})`;
   return entry.shift;
+}
+
+function reportShiftHtml(entry) {
+  const comment = String(entry.comment || "").trim();
+  return `${esc(reportShiftText(entry))}${comment ? `<small class="report-comment">${esc(comment)}</small>` : ""}`;
 }
 
 function reportDayName(day) {
