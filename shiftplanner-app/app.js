@@ -1299,6 +1299,7 @@ function buildReportHtml(config = getReportConfig()) {
   const weekGroups = reportWeekGroups(config.days);
   const periodLabel = config.type === "threeWeeks" ? "3 Week Total" : config.type === "twoWeeks" ? "2 Week Total" : config.type === "month" ? "Month Total" : "Period Total";
   const employeeHead = reportEmployees.map((employee) => `<th>${esc(employee)}</th>`).join("");
+  const restaurantTotals = reportRestaurantTotalCards(config);
   const reportRows = reportEmployees.length
     ? weekGroups
         .map((group) =>
@@ -1327,6 +1328,7 @@ function buildReportHtml(config = getReportConfig()) {
         <h2>${esc(config.title)}</h2>
         <p>${config.location ? esc(config.location) : "All restaurants"} · ${esc(periodLabel)}</p>
       </header>
+      ${restaurantTotals}
       <table class="matrix-report">
         <thead>
           <tr><th></th><th>Days</th><th>Dates</th>${employeeHead}</tr>
@@ -1339,6 +1341,23 @@ function buildReportHtml(config = getReportConfig()) {
       </footer>
     </article>
   `;
+}
+
+function reportRestaurantTotalCards(config) {
+  const { total, locationStats } = getStats({
+    employees: config.employees,
+    days: config.days,
+    location: config.location,
+  });
+  const locations = config.location ? [config.location] : state.locations;
+  const locationCards = locations
+    .map((location) => {
+      const hours = locationStats[location]?.total ?? 0;
+      return `<div><span>${esc(location)}</span><strong>${formatNumber(hours)} h</strong></div>`;
+    })
+    .join("");
+  const totalCard = config.location ? "" : `<div><span>Total hours</span><strong>${formatNumber(total)} h</strong></div>`;
+  return `<section class="report-kpis">${locationCards}${totalCard}</section>`;
 }
 
 function reportWeekTotalRow(group, employees, config, data) {
