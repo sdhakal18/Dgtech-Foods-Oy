@@ -1955,10 +1955,10 @@ th {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: auto;
-  height: auto;
-  min-width: 520px;
-  min-height: 280px;
+  width: 580px;
+  height: 350px;
+  min-width: 400px;
+  min-height: 200px;
   max-width: 95vw;
   max-height: 90vh;
   resize: both;
@@ -2030,8 +2030,9 @@ th {
 
 .pip-body {
   padding: 10px;
-  overflow-x: auto;
-  max-height: 220px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .pip-table {
