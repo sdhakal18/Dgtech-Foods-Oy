@@ -437,6 +437,61 @@ function hoursForEntry(entry) {
   return hoursFromShift(entry.shift);
 }
 
+function calculateEveningHours(shift) {
+  const normalized = normalizeShift(shift);
+  if (!normalized || nonWorkingShifts.includes(normalized)) return 0;
+  const [startStr, endStr] = normalized.split("-");
+  if (!startStr || !endStr) return 0;
+  const toHours = (value) => {
+    const [h, m] = value.split(":").map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+    return h + m / 60;
+  };
+  const start = toHours(startStr);
+  const end = toHours(endStr);
+  if (start <= end) {
+    return Math.max(0, Math.min(end, 24) - Math.max(start, 18));
+  } else {
+    const part1 = Math.max(0, 24 - Math.max(start, 18));
+    const part2 = Math.max(0, Math.min(end, 24) - Math.max(0, 18));
+    return part1 + part2;
+  }
+}
+
+function eveningHoursForEntry(entry) {
+  if (!entry) return 0;
+  if (entry.shift === "Sick leave") return calculateEveningHours(entry.paidShift || entry.publishedShift);
+  return calculateEveningHours(entry.shift);
+}
+
+function getEmployeePeriodStats(days, employees, config, data) {
+  const stats = {};
+  for (const employee of employees) {
+    stats[employee] = {
+      total: 0,
+      evening: 0,
+      sunday: 0,
+      holiday: 0,
+    };
+    for (const day of days) {
+      const entry = data[day]?.[employee];
+      if (!entry) continue;
+      if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location)) continue;
+      const hrs = hoursForEntry(entry);
+      if (hrs <= 0) continue;
+      const info = dayInfo(day);
+      stats[employee].total += hrs;
+      stats[employee].evening += eveningHoursForEntry(entry);
+      if (info.isSunday) {
+        stats[employee].sunday += hrs;
+      } else if (info.holidayName) {
+        stats[employee].holiday += hrs;
+      }
+    }
+  }
+  return stats;
+}
+
 function formatNumber(value) {
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
@@ -1361,32 +1416,44 @@ function reportRestaurantTotalCards(config) {
 }
 
 function reportWeekTotalRow(group, employees, config, data) {
-  const cells = employees
-    .map((employee) => {
-      const total = group.days.reduce((sum, day) => {
-        const entry = data[day]?.[employee];
-        if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location)) return sum;
-        return sum + hoursForEntry(entry);
-      }, 0);
-      return `<td>${formatNumber(total)}</td>`;
-    })
-    .join("");
-  return `<tr class="report-total-row"><td></td><td>Total</td><td></td>${cells}</tr>`;
+  const stats = getEmployeePeriodStats(group.days, employees, config, data);
+  const hasEvening = employees.some(emp => stats[emp].evening > 0);
+  const hasSunday = employees.some(emp => stats[emp].sunday > 0);
+  const hasHoliday = employees.some(emp => stats[emp].holiday > 0);
+
+  let html = `<tr class="report-total-row"><td></td><td>Total</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
+
+  if (hasEvening) {
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].evening)}</td>`).join("")}</tr>`;
+  }
+  if (hasSunday) {
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Sunday hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sunday)}</td>`).join("")}</tr>`;
+  }
+  if (hasHoliday) {
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Holiday hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
+  }
+  return html;
 }
 
 function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) {
   const allDays = weekGroups.flatMap((group) => group.days);
-  const cells = employees
-    .map((employee) => {
-      const total = allDays.reduce((sum, day) => {
-        const entry = data[day]?.[employee];
-        if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location)) return sum;
-        return sum + hoursForEntry(entry);
-      }, 0);
-      return `<td>${formatNumber(total)}</td>`;
-    })
-    .join("");
-  return `<tr class="report-total-row report-period-row"><td></td><td>${esc(periodLabel)}</td><td></td>${cells}</tr>`;
+  const stats = getEmployeePeriodStats(allDays, employees, config, data);
+  const hasEvening = employees.some(emp => stats[emp].evening > 0);
+  const hasSunday = employees.some(emp => stats[emp].sunday > 0);
+  const hasHoliday = employees.some(emp => stats[emp].holiday > 0);
+
+  let html = `<tr class="report-total-row report-period-row"><td></td><td>${esc(periodLabel)}</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
+
+  if (hasEvening) {
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].evening)}</td>`).join("")}</tr>`;
+  }
+  if (hasSunday) {
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Sunday hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sunday)}</td>`).join("")}</tr>`;
+  }
+  if (hasHoliday) {
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Holiday hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
+  }
+  return html;
 }
 
 function reportShiftText(entry) {

@@ -1252,6 +1252,13 @@ th {
   color: #ffffff;
 }
 
+.matrix-report .report-total-row.report-breakdown-row td {
+  background: var(--soft-blue);
+  color: var(--navy);
+  font-weight: 700;
+  border-top: 1px dashed #8aa1b8;
+}
+
 .report-week-total,
 .report-week-total-head,
 .report-period-total {
