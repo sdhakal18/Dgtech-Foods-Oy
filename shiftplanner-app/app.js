@@ -1432,13 +1432,14 @@ function reportRestaurantTotalCards(config) {
 
 function reportWeekTotalRow(group, employees, config, data) {
   const stats = getEmployeePeriodStats(group.days, employees, config, data);
-  let html = `<tr class="report-total-row"><td></td><td>Total</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
+  const label = state.report.payrollMode ? "Total working hours" : "Total";
+  let html = `<tr class="report-total-row"><td></td><td>${esc(label)}</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
 
   if (state.report.payrollMode) {
-    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Weekday evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].weekdayEvening)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Weekday evening shift hours 18-24 o'clock</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].weekdayEvening)}</td>`).join("")}</tr>`;
     html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Sunday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sunday)}</td>`).join("")}</tr>`;
     html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Holiday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
-    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Sun/Holiday evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sundayOrHolidayEvening)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Sunday or Weekday holidays evening shift hours klo 18-24</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sundayOrHolidayEvening)}</td>`).join("")}</tr>`;
   }
   return html;
 }
@@ -1446,13 +1447,14 @@ function reportWeekTotalRow(group, employees, config, data) {
 function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) {
   const allDays = weekGroups.flatMap((group) => group.days);
   const stats = getEmployeePeriodStats(allDays, employees, config, data);
-  let html = `<tr class="report-total-row report-period-row"><td></td><td>${esc(periodLabel)}</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
+  const label = state.report.payrollMode ? "Total working hours" : periodLabel;
+  let html = `<tr class="report-total-row report-period-row"><td></td><td>${esc(label)}</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
 
   if (state.report.payrollMode) {
-    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Weekday evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].weekdayEvening)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Weekday evening shift hours 18-24 o'clock</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].weekdayEvening)}</td>`).join("")}</tr>`;
     html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Sunday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sunday)}</td>`).join("")}</tr>`;
     html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Holiday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
-    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Sun/Holiday evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sundayOrHolidayEvening)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Sunday or Weekday holidays evening shift hours klo 18-24</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sundayOrHolidayEvening)}</td>`).join("")}</tr>`;
   }
   return html;
 }
