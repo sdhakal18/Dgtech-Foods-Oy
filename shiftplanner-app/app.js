@@ -75,6 +75,7 @@ const undoStack = [];
 const maxUndoDepth = 40;
 let pipActiveDay = null;
 let pipActiveEmployee = null;
+let pipUserSizedOrDragged = false;
 
 const initialState = {
   year: 2026,
@@ -1944,6 +1945,8 @@ function makeElementDraggable(elmnt, header) {
     if (e.button !== 0) return;
     if (e.target.closest("button") || e.target.closest("input") || e.target.closest("select")) return;
     
+    pipUserSizedOrDragged = true;
+    
     pos3 = e.clientX;
     pos4 = e.clientY;
     document.onmouseup = closeDragElement;
@@ -1960,8 +1963,9 @@ function makeElementDraggable(elmnt, header) {
     const newTop = elmnt.offsetTop - pos2;
     const newLeft = elmnt.offsetLeft - pos1;
     
-    const maxTop = window.innerHeight - elmnt.offsetHeight;
-    const maxLeft = window.innerWidth - elmnt.offsetWidth;
+    const workspace = document.querySelector(".workspace");
+    const maxTop = (workspace ? workspace.clientHeight : window.innerHeight) - elmnt.offsetHeight;
+    const maxLeft = (workspace ? workspace.clientWidth : window.innerWidth) - elmnt.offsetWidth;
     
     elmnt.style.top = Math.max(0, Math.min(newTop, maxTop)) + "px";
     elmnt.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + "px";
@@ -1988,7 +1992,13 @@ function ensurePipWindow() {
       </div>
       <div class="pip-body" id="pipWeekBody"></div>
     `;
-    document.body.appendChild(pip);
+    
+    const workspace = document.querySelector(".workspace");
+    if (workspace) {
+      workspace.appendChild(pip);
+    } else {
+      document.body.appendChild(pip);
+    }
 
     pip.querySelector(".pip-close-btn").addEventListener("click", () => {
       pip.classList.remove("visible");
@@ -1997,6 +2007,13 @@ function ensurePipWindow() {
     });
 
     makeElementDraggable(pip, pip.querySelector(".pip-header"));
+
+    pip.addEventListener("mousedown", (e) => {
+      const rect = pip.getBoundingClientRect();
+      if (e.clientX > rect.right - 25 && e.clientY > rect.bottom - 25) {
+        pipUserSizedOrDragged = true;
+      }
+    });
   }
   return pip;
 }
@@ -2012,6 +2029,14 @@ function shortEmployeeName(name) {
 
 function renderPip(day, employee) {
   const pip = ensurePipWindow();
+  
+  if (!pipUserSizedOrDragged) {
+    pip.style.width = "";
+    pip.style.height = "";
+    pip.style.left = "";
+    pip.style.top = "";
+  }
+
   const weekBlock = duplicateBlocks("week", state.year, state.month).find(block => 
     block.dates.some(date => date.getDate() === day && date.getFullYear() === state.year && date.getMonth() === state.month)
   );
@@ -2106,6 +2131,23 @@ function renderPip(day, employee) {
   `;
 
   pip.classList.add("visible");
+
+  if (!pipUserSizedOrDragged) {
+    window.requestAnimationFrame(() => {
+      const w = pip.offsetWidth;
+      const h = pip.offsetHeight;
+      const margin = 16;
+      
+      const workspace = document.querySelector(".workspace");
+      const widthLimit = workspace ? workspace.clientWidth : window.innerWidth;
+      const heightLimit = workspace ? workspace.clientHeight : window.innerHeight;
+
+      pip.style.left = (widthLimit - w - margin) + "px";
+      pip.style.top = (heightLimit - h - margin) + "px";
+      pip.style.width = w + "px";
+      pip.style.height = h + "px";
+    });
+  }
 }
 
 function formatShiftCompact(shift) {

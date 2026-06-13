@@ -313,6 +313,7 @@ input {
 .workspace {
   min-width: 0;
   padding: 24px;
+  position: relative;
 }
 
 .app-footer {
@@ -1952,11 +1953,9 @@ th {
 
 /* Floating Picture in Picture (PiP) Window */
 .pip-window {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 580px;
-  height: 350px;
+  position: absolute;
+  width: max-content;
+  height: max-content;
   min-width: 400px;
   min-height: 200px;
   max-width: 95vw;
