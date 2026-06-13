@@ -1955,6 +1955,15 @@ function ensurePipWindow() {
   return pip;
 }
 
+function shortEmployeeName(name) {
+  if (!name) return "";
+  const parts = name.split(" ");
+  if (parts.length > 1) {
+    return `${parts[0]} ${parts[1][0]}.`;
+  }
+  return parts[0];
+}
+
 function renderPip(day, employee) {
   const pip = ensurePipWindow();
   const weekBlock = duplicateBlocks("week", state.year, state.month).find(block => 
@@ -1973,25 +1982,24 @@ function renderPip(day, employee) {
 
   const employees = currentScheduleEmployees();
   
-  const headers = weekBlock.dates.map(date => {
-    const isEditingCol = date.getDate() === day && date.getFullYear() === state.year && date.getMonth() === state.month;
-    const colClass = isEditingCol ? "class='pip-col-focused'" : "";
-    const weekdayStr = date.toLocaleDateString("en-US", { weekday: "short" });
-    return `<th ${colClass}>${esc(weekdayStr)}<br>${date.getDate()}</th>`;
+  const employeeHeaders = employees.map(emp => {
+    const isEditingRow = emp === employee;
+    const colClass = isEditingRow ? "class='pip-col-focused'" : "";
+    return `<th ${colClass} title="${esc(emp)}">${esc(shortEmployeeName(emp))}</th>`;
   }).join("");
 
-  const rows = employees.map(emp => {
-    const isEditingRow = emp === employee;
-    const rowClass = isEditingRow ? "class='pip-row-focused'" : "";
-    
-    const cells = weekBlock.dates.map(date => {
-      const isEditingCol = date.getDate() === day && date.getFullYear() === state.year && date.getMonth() === state.month;
+  const rows = weekBlock.dates.map(date => {
+    const isEditingCol = date.getDate() === day && date.getFullYear() === state.year && date.getMonth() === state.month;
+    const colClass = isEditingCol ? "pip-col-focused" : "";
+    const weekdayStr = date.toLocaleDateString("en-US", { weekday: "short" });
+
+    const cells = employees.map(emp => {
+      const isEditingRow = emp === employee;
       const isEditingCell = isEditingRow && isEditingCol;
-      
       const dayData = dataForDate(date);
       const entry = dayData?.[emp];
       const shiftVal = entry?.shift || "00:00-00:00";
-      
+
       let shiftClass = "pip-shift-val";
       if (shiftVal === "00:00-00:00" || shiftVal === "OFF") shiftClass += " pip-off";
       else if (shiftVal === "Sick leave") shiftClass += " pip-sick";
@@ -2000,31 +2008,53 @@ function renderPip(day, employee) {
       const compactText = formatShiftCompact(shiftVal);
       const cellClass = [
         isEditingCell ? "pip-cell-editing" : "",
-        isEditingCol ? "pip-day-col pip-col-focused" : ""
+        isEditingRow ? "pip-row-focused" : "",
+        isEditingCol ? "pip-col-focused" : ""
       ].filter(Boolean).join(" ");
 
       return `<td class="${cellClass}"><span class="${shiftClass}">${esc(compactText)}</span></td>`;
     }).join("");
 
     return `
-      <tr ${rowClass}>
-        <td class="pip-employee-name" title="${esc(emp)}">${esc(emp)}</td>
+      <tr class="${isEditingCol ? "pip-row-focused" : ""}">
+        <td class="pip-day-col ${colClass}">${esc(weekdayStr)}</td>
+        <td class="pip-date-col ${colClass}">${date.getDate()}</td>
         ${cells}
       </tr>
     `;
   }).join("");
+
+  const totalCells = employees.map(emp => {
+    const isEditingRow = emp === employee;
+    const weekHours = weekBlock.dates.reduce((sum, date) => {
+      const dayData = dataForDate(date);
+      const entry = dayData?.[emp];
+      return canSeeEntry(emp, entry) ? sum + hoursForEntry(entry) : sum;
+    }, 0);
+    const cellClass = isEditingRow ? "pip-row-focused" : "";
+    return `<td class="${cellClass} pip-total-val" style="font-weight: 700; color: #3b82f6;">${formatNumber(weekHours)}h</td>`;
+  }).join("");
+
+  const totalRow = `
+    <tr class="pip-total-row" style="background: rgba(255,255,255,0.05); border-top: 2px solid rgba(255,255,255,0.15);">
+      <td colspan="2" style="text-align: left; padding-left: 8px; font-weight: 700; color: #9ca3af;">Total</td>
+      ${totalCells}
+    </tr>
+  `;
 
   const body = pip.querySelector("#pipWeekBody");
   body.innerHTML = `
     <table class="pip-table">
       <thead>
         <tr>
-          <th>Employee</th>
-          ${headers}
+          <th>Day</th>
+          <th>Date</th>
+          ${employeeHeaders}
         </tr>
       </thead>
       <tbody>
         ${rows}
+        ${totalRow}
       </tbody>
     </table>
   `;
