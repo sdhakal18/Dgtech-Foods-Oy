@@ -1955,7 +1955,14 @@ th {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 460px;
+  width: auto;
+  height: auto;
+  min-width: 520px;
+  min-height: 280px;
+  max-width: 95vw;
+  max-height: 90vh;
+  resize: both;
+  overflow: hidden;
   background: rgba(17, 24, 39, 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -1967,7 +1974,6 @@ th {
   flex-direction: column;
   color: #f3f4f6;
   font-family: inherit;
-  overflow: hidden;
   transition: opacity 0.25s ease, transform 0.25s ease;
   opacity: 0;
   transform: translateY(10px) scale(0.98);
@@ -1987,7 +1993,7 @@ th {
   padding: 10px 14px;
   background: rgba(255, 255, 255, 0.05);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  cursor: default;
+  cursor: move;
 }
 
 .pip-title {

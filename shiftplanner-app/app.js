@@ -1931,6 +1931,50 @@ function publishCurrentMonth() {
   }
 }
 
+function makeElementDraggable(elmnt, header) {
+  let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+  if (header) {
+    header.onmousedown = dragMouseDown;
+  } else {
+    elmnt.onmousedown = dragMouseDown;
+  }
+
+  function dragMouseDown(e) {
+    e = e || window.event;
+    if (e.button !== 0) return;
+    if (e.target.closest("button") || e.target.closest("input") || e.target.closest("select")) return;
+    
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    document.onmouseup = closeDragElement;
+    document.onmousemove = elementDrag;
+  }
+
+  function elementDrag(e) {
+    e = e || window.event;
+    pos1 = pos3 - e.clientX;
+    pos2 = pos4 - e.clientY;
+    pos3 = e.clientX;
+    pos4 = e.clientY;
+    
+    const newTop = elmnt.offsetTop - pos2;
+    const newLeft = elmnt.offsetLeft - pos1;
+    
+    const maxTop = window.innerHeight - elmnt.offsetHeight;
+    const maxLeft = window.innerWidth - elmnt.offsetWidth;
+    
+    elmnt.style.top = Math.max(0, Math.min(newTop, maxTop)) + "px";
+    elmnt.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + "px";
+    elmnt.style.bottom = "auto";
+    elmnt.style.right = "auto";
+  }
+
+  function closeDragElement() {
+    document.onmouseup = null;
+    document.onmousemove = null;
+  }
+}
+
 function ensurePipWindow() {
   let pip = document.getElementById("pipWeekWindow");
   if (!pip) {
@@ -1951,6 +1995,8 @@ function ensurePipWindow() {
       pipActiveDay = null;
       pipActiveEmployee = null;
     });
+
+    makeElementDraggable(pip, pip.querySelector(".pip-header"));
   }
   return pip;
 }
