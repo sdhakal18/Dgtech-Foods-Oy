@@ -73,6 +73,8 @@ let copiedComment = null;
 
 const undoStack = [];
 const maxUndoDepth = 40;
+let pipActiveDay = null;
+let pipActiveEmployee = null;
 
 const initialState = {
   year: 2026,
@@ -1555,6 +1557,12 @@ function render() {
   renderReportPreview();
   publishButtonState();
   updateUndoButtonVisibility();
+  if (pipActiveDay !== null && pipActiveEmployee !== null) {
+    const pip = document.getElementById("pipWeekWindow");
+    if (pip && pip.classList.contains("visible")) {
+      renderPip(pipActiveDay, pipActiveEmployee);
+    }
+  }
   document.querySelectorAll(".nav-tab").forEach((button) => button.classList.toggle("active", button.dataset.view === state.view));
   document.querySelectorAll(".view-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `${state.view}View`));
 }
@@ -1921,6 +1929,116 @@ function publishCurrentMonth() {
   if (confirm(`Are you sure you want to publish the entire month of ${monthNames[state.month]} ${state.year}?`)) {
     publishPeriod("month");
   }
+}
+
+function ensurePipWindow() {
+  let pip = document.getElementById("pipWeekWindow");
+  if (!pip) {
+    pip = document.createElement("div");
+    pip.id = "pipWeekWindow";
+    pip.className = "pip-window";
+    pip.innerHTML = `
+      <div class="pip-header">
+        <span class="pip-title">📺 Week Overview</span>
+        <button class="pip-close-btn" type="button" aria-label="Close Picture-in-Picture">&times;</button>
+      </div>
+      <div class="pip-body" id="pipWeekBody"></div>
+    `;
+    document.body.appendChild(pip);
+
+    pip.querySelector(".pip-close-btn").addEventListener("click", () => {
+      pip.classList.remove("visible");
+      pipActiveDay = null;
+      pipActiveEmployee = null;
+    });
+  }
+  return pip;
+}
+
+function renderPip(day, employee) {
+  const pip = ensurePipWindow();
+  const weekBlock = duplicateBlocks("week", state.year, state.month).find(block => 
+    block.dates.some(date => date.getDate() === day && date.getFullYear() === state.year && date.getMonth() === state.month)
+  );
+
+  if (!weekBlock) {
+    pip.classList.remove("visible");
+    return;
+  }
+
+  pipActiveDay = day;
+  pipActiveEmployee = employee;
+
+  pip.querySelector(".pip-title").textContent = `📺 ${weekBlock.label.split(":")[0]} Overview`;
+
+  const employees = currentScheduleEmployees();
+  
+  const headers = weekBlock.dates.map(date => {
+    const isEditingCol = date.getDate() === day && date.getFullYear() === state.year && date.getMonth() === state.month;
+    const colClass = isEditingCol ? "class='pip-col-focused'" : "";
+    const weekdayStr = date.toLocaleDateString("en-US", { weekday: "short" });
+    return `<th ${colClass}>${esc(weekdayStr)}<br>${date.getDate()}</th>`;
+  }).join("");
+
+  const rows = employees.map(emp => {
+    const isEditingRow = emp === employee;
+    const rowClass = isEditingRow ? "class='pip-row-focused'" : "";
+    
+    const cells = weekBlock.dates.map(date => {
+      const isEditingCol = date.getDate() === day && date.getFullYear() === state.year && date.getMonth() === state.month;
+      const isEditingCell = isEditingRow && isEditingCol;
+      
+      const dayData = dataForDate(date);
+      const entry = dayData?.[emp];
+      const shiftVal = entry?.shift || "00:00-00:00";
+      
+      let shiftClass = "pip-shift-val";
+      if (shiftVal === "00:00-00:00" || shiftVal === "OFF") shiftClass += " pip-off";
+      else if (shiftVal === "Sick leave") shiftClass += " pip-sick";
+      else if (shiftVal === "Wish OFF") shiftClass += " pip-wish";
+
+      const compactText = formatShiftCompact(shiftVal);
+      const cellClass = [
+        isEditingCell ? "pip-cell-editing" : "",
+        isEditingCol ? "pip-day-col pip-col-focused" : ""
+      ].filter(Boolean).join(" ");
+
+      return `<td class="${cellClass}"><span class="${shiftClass}">${esc(compactText)}</span></td>`;
+    }).join("");
+
+    return `
+      <tr ${rowClass}>
+        <td class="pip-employee-name" title="${esc(emp)}">${esc(emp)}</td>
+        ${cells}
+      </tr>
+    `;
+  }).join("");
+
+  const body = pip.querySelector("#pipWeekBody");
+  body.innerHTML = `
+    <table class="pip-table">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          ${headers}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  `;
+
+  pip.classList.add("visible");
+}
+
+function formatShiftCompact(shift) {
+  if (!shift || shift === "00:00-00:00" || shift === "OFF") return "—";
+  if (shift === "Sick leave") return "Sick";
+  if (shift === "Wish OFF") return "Wish";
+  const match = shift.match(/^(\d{2}):\d{2}-(\d{2}):\d{2}$/);
+  if (match) return `${match[1]}-${match[2]}`;
+  return shift;
 }
 
 function seedMaySample() {
@@ -2686,8 +2804,36 @@ document.addEventListener("focusout", (event) => {
   }
 });
 
+document.addEventListener("focusin", (event) => {
+  if (state.view !== "schedule") {
+    const pip = document.getElementById("pipWeekWindow");
+    if (pip) pip.classList.remove("visible");
+    return;
+  }
+  const isCellEditor = event.target.matches('[data-field="shift"], [data-field="comment"], .location-select, .shift-option-select');
+  if (isCellEditor) {
+    const day = Number(event.target.dataset.day);
+    const employee = decodeURIComponent(event.target.dataset.employee);
+    if (!Number.isNaN(day) && employee) {
+      renderPip(day, employee);
+    }
+  }
+});
+
 document.addEventListener("click", (event) => {
   if (!currentUser()) return;
+
+  const cell = event.target.closest(".schedule-cell");
+  if (cell) {
+    const input = cell.querySelector('[data-field="shift"]');
+    if (input) {
+      const day = Number(input.dataset.day);
+      const employee = decodeURIComponent(input.dataset.employee);
+      if (!Number.isNaN(day) && employee) {
+        renderPip(day, employee);
+      }
+    }
+  }
 
   if (event.target.closest("#fullscreenBtn")) {
     toggleFullscreen();

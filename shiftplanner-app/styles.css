@@ -1949,3 +1949,150 @@ th {
   filter: grayscale(80%) !important;
   pointer-events: none !important;
 }
+
+/* Floating Picture in Picture (PiP) Window */
+.pip-window {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 460px;
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  color: #f3f4f6;
+  font-family: inherit;
+  overflow: hidden;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  pointer-events: none;
+}
+
+.pip-window.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.pip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: default;
+}
+
+.pip-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+}
+
+.pip-close-btn {
+  background: none;
+  border: 0;
+  color: #9ca3af;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.pip-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.pip-body {
+  padding: 10px;
+  overflow-x: auto;
+  max-height: 220px;
+}
+
+.pip-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: center;
+}
+
+.pip-table th, .pip-table td {
+  padding: 6px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pip-table th {
+  background: rgba(255, 255, 255, 0.03);
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.pip-table th.pip-col-focused {
+  background: rgba(45, 127, 249, 0.25);
+  color: #60a5fa;
+}
+
+.pip-table td.pip-employee-name {
+  text-align: left;
+  font-weight: 600;
+  color: #e5e7eb;
+  padding-left: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  white-space: nowrap;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pip-table tr.pip-row-focused td.pip-employee-name {
+  color: #60a5fa;
+  background: rgba(45, 127, 249, 0.15);
+}
+
+.pip-table td.pip-cell-editing {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+  background: rgba(59, 130, 246, 0.25) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.pip-table tr.pip-row-focused td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.pip-table td.pip-day-col.pip-col-focused {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pip-shift-val {
+  font-weight: 500;
+}
+.pip-shift-val.pip-off {
+  color: #6b7280;
+}
+.pip-shift-val.pip-sick {
+  color: #f87171;
+}
+.pip-shift-val.pip-wish {
+  color: #c084fc;
+}
