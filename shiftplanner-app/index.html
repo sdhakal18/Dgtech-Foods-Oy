@@ -97,6 +97,9 @@
             <p id="pageMeta">Koivistonkylä and Ylöjärvi</p>
           </div>
           <div class="top-actions">
+            <button id="fullscreenBtn" class="icon-button" title="Fullscreen" type="button" aria-label="Fullscreen" style="display: flex; align-items: center; gap: 6px; padding: 0 14px;">
+              <span>Fullscreen</span>
+            </button>
             <button id="printPage" class="icon-button" title="Print" type="button" aria-label="Print">
               <span>Print</span>
             </button>
@@ -124,8 +127,27 @@
         </section>
 
         <section id="scheduleView" class="view-panel active">
-          <div class="table-toolbar">
-            <input id="employeeFilter" class="filter-input" type="search" placeholder="Filter employee" />
+          <div class="table-toolbar" style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; width: 100%;">
+            <input id="employeeFilter" class="filter-input" type="search" placeholder="Filter employee" style="max-width: 160px;" />
+            <select id="locationFilter" class="filter-input" style="max-width: 160px; height: 38px; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; font-weight: 600; color: var(--ink); background-color: #fff; cursor: pointer;">
+              <option value="">All restaurants</option>
+            </select>
+            
+            <div style="border-left: 1px solid var(--line); height: 24px; margin: 0 5px;"></div>
+            
+            <button id="paintToggleBtn" class="quiet-button" type="button" style="height: 38px; padding: 0 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; border: 1px dashed var(--line); border-radius: 6px; background-color: #fff; color: var(--navy); cursor: pointer;">
+              <span>🎨 Paintbrush</span>
+            </button>
+            
+            <div id="paintControls" style="display: none; align-items: center; gap: 8px;">
+              <select id="paintShift" class="filter-input" style="max-width: 130px; height: 38px; font-size: 12px;"></select>
+              <select id="paintLocation" class="filter-input" style="max-width: 130px; height: 38px; font-size: 12px;"></select>
+              <span style="font-size: 11px; color: var(--muted); font-style: italic;">Click cells to apply (Esc to cancel)</span>
+            </div>
+            
+            <span style="font-size: 12px; color: var(--muted); margin-left: auto;">
+              💡 Hover + press <strong>C</strong> to copy, <strong>V</strong> to paste!
+            </span>
           </div>
           <div class="schedule-duplicate">
             <span>Duplicate into this month</span>

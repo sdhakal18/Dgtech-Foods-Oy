@@ -63,6 +63,14 @@ let serverReady = false;
 let bootstrapping = true;
 let employeeRequestDay = "";
 
+let paintActive = false;
+let paintShiftValue = "09:00-17:00";
+let paintLocationValue = "";
+let hoveredCell = null;
+let copiedShift = null;
+let copiedLocation = null;
+let copiedComment = null;
+
 const initialState = {
   year: 2026,
   month: 4,
@@ -140,6 +148,12 @@ const el = {
   reportPayrollMode: document.querySelector("#reportPayrollMode"),
   reportPreview: document.querySelector("#reportPreview"),
   employeeFilter: document.querySelector("#employeeFilter"),
+  fullscreenBtn: document.querySelector("#fullscreenBtn"),
+  locationFilter: document.querySelector("#locationFilter"),
+  paintToggleBtn: document.querySelector("#paintToggleBtn"),
+  paintControls: document.querySelector("#paintControls"),
+  paintShift: document.querySelector("#paintShift"),
+  paintLocation: document.querySelector("#paintLocation"),
   copyLastWeek: document.querySelector("#copyLastWeek"),
   copyLastThreeWeeks: document.querySelector("#copyLastThreeWeeks"),
   copyLastMonth: document.querySelector("#copyLastMonth"),
@@ -768,6 +782,25 @@ function renderSelectors() {
     el.monthSelect.append(option);
   });
 
+  if (el.locationFilter) {
+    const currentFilter = el.locationFilter.value;
+    el.locationFilter.innerHTML = `<option value="">All restaurants</option>` +
+      state.locations.map(loc => `<option value="${esc(loc)}" ${loc === currentFilter ? "selected" : ""}>${esc(loc)}</option>`).join("");
+  }
+
+  if (paintActive) {
+    if (el.paintShift) {
+      const currentShift = el.paintShift.value || paintShiftValue;
+      el.paintShift.innerHTML = shifts.map(s => `<option value="${esc(s)}" ${s === currentShift ? "selected" : ""}>${esc(s)}</option>`).join("");
+      paintShiftValue = el.paintShift.value;
+    }
+    if (el.paintLocation) {
+      const currentLoc = el.paintLocation.value || paintLocationValue;
+      el.paintLocation.innerHTML = state.locations.map(loc => `<option value="${esc(loc)}" ${loc === currentLoc ? "selected" : ""}>${esc(loc)}</option>`).join("");
+      paintLocationValue = el.paintLocation.value;
+    }
+  }
+
   renderReportSelectors();
   renderQuickDuplicateControls();
 }
@@ -1041,8 +1074,12 @@ function scheduleCell(day, employee, entry) {
   const visible = canSeeEntry(employee, entry) || employee === state.activeEmployee;
   if (!visible) return `<div class="schedule-cell muted-cell"></div>`;
   const sickPaid = entry.shift === "Sick leave" && hoursForEntry(entry) > 0 ? `<span class="paid-shift">Published hours: ${formatDuration(hoursForEntry(entry))}</span>` : "";
+
+  const selectedLocFilter = el.locationFilter ? el.locationFilter.value : "";
+  const isMutedByFilter = selectedLocFilter && entry.location !== selectedLocFilter && hoursForEntry(entry) > 0;
+
   return `
-    <div class="schedule-cell ${entry.published ? "published-cell" : "draft-cell"}">
+    <div class="schedule-cell ${entry.published ? "published-cell" : "draft-cell"} ${isMutedByFilter ? "filtered-out-location" : ""}">
       ${shiftSelect(day, employee, entry)}
       ${locationSelect(day, employee, entry)}
       ${commentInput(day, employee, entry)}
@@ -2409,6 +2446,18 @@ function toast(message) {
 }
 
 document.addEventListener("change", (event) => {
+  if (event.target === el.locationFilter) {
+    renderSchedule();
+    return;
+  }
+  if (event.target === document.querySelector("#paintShift")) {
+    paintShiftValue = event.target.value;
+    return;
+  }
+  if (event.target === document.querySelector("#paintLocation")) {
+    paintLocationValue = event.target.value;
+    return;
+  }
   if (event.target === el.yearSelect) {
     state.year = Number(event.target.value);
     saveState();
@@ -2477,6 +2526,15 @@ document.addEventListener("focusout", (event) => {
 
 document.addEventListener("click", (event) => {
   if (!currentUser()) return;
+
+  if (event.target.closest("#fullscreenBtn")) {
+    toggleFullscreen();
+    return;
+  }
+  if (event.target.closest("#paintToggleBtn")) {
+    togglePaintMode();
+    return;
+  }
 
   const requestButton = event.target.closest("[data-request-day]");
   if (requestButton) {
@@ -2616,5 +2674,160 @@ async function bootstrap() {
     render();
   }
 }
+
+function toggleFullscreen() {
+  const workspace = document.querySelector(".workspace");
+  if (!workspace) return;
+  if (!document.fullscreenElement) {
+    workspace.requestFullscreen().catch((err) => {
+      toast("Error enabling fullscreen: " + err.message);
+    });
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+document.addEventListener("fullscreenchange", () => {
+  const isFull = Boolean(document.fullscreenElement);
+  const btn = document.querySelector("#fullscreenBtn");
+  if (btn) {
+    btn.classList.toggle("active", isFull);
+    const span = btn.querySelector("span");
+    if (span) {
+      span.textContent = isFull ? "Exit Fullscreen" : "Fullscreen";
+    }
+  }
+});
+
+function togglePaintMode(forceState) {
+  if (isEmployee()) return;
+  paintActive = forceState !== undefined ? forceState : !paintActive;
+  
+  const btn = document.querySelector("#paintToggleBtn");
+  const controls = document.querySelector("#paintControls");
+  const table = document.querySelector("#scheduleTable");
+  
+  if (btn) {
+    btn.classList.toggle("active", paintActive);
+    btn.style.backgroundColor = paintActive ? "var(--soft-blue)" : "";
+    btn.style.borderColor = paintActive ? "var(--blue)" : "";
+  }
+  if (controls) {
+    controls.style.display = paintActive ? "flex" : "none";
+  }
+  if (table) {
+    table.classList.toggle("paint-cursor-active", paintActive);
+  }
+  
+  if (paintActive) {
+    if (el.paintShift) {
+      el.paintShift.innerHTML = shifts.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+      paintShiftValue = el.paintShift.value;
+    }
+    if (el.paintLocation) {
+      el.paintLocation.innerHTML = state.locations.map(loc => `<option value="${esc(loc)}">${esc(loc)}</option>`).join("");
+      paintLocationValue = el.paintLocation.value;
+    }
+  }
+}
+
+// Intercept clicks on cells during paint mode (using capture phase)
+document.addEventListener("click", (event) => {
+  if (isEmployee() || !paintActive) return;
+  
+  // Ignore clicks on controls themselves
+  if (event.target.closest("#paintControls") || event.target.closest("#paintToggleBtn")) {
+    return;
+  }
+  
+  const cell = event.target.closest(".schedule-cell");
+  if (!cell) return;
+  
+  const elementWithData = cell.querySelector("[data-employee]");
+  if (!elementWithData) return;
+  
+  const day = elementWithData.dataset.day;
+  const employee = decodeURIComponent(elementWithData.dataset.employee);
+  const entry = ensureMonth()[day]?.[employee];
+  
+  if (entry) {
+    if (canEditEntry(employee, entry, "shift")) {
+      entry.shift = paintShiftValue;
+    }
+    if (canEditEntry(employee, entry, "location")) {
+      entry.location = paintLocationValue;
+    }
+    saveState();
+    render();
+    toast(`Painted shift for ${employee} on day ${day}`);
+  }
+  
+  event.preventDefault();
+  event.stopPropagation();
+}, true);
+
+// Mouseover cell tracking for copy-paste
+document.addEventListener("mouseover", (event) => {
+  const cell = event.target.closest(".schedule-cell");
+  if (cell) {
+    hoveredCell = cell;
+  }
+});
+
+document.addEventListener("mouseout", (event) => {
+  const cell = event.target.closest(".schedule-cell");
+  if (cell && hoveredCell === cell) {
+    hoveredCell = null;
+  }
+});
+
+// Keydown listener for keyboard shortcuts and Esc
+window.addEventListener("keydown", (event) => {
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
+    return;
+  }
+  
+  const key = event.key.toLowerCase();
+  
+  if (key === "escape") {
+    if (paintActive) {
+      togglePaintMode(false);
+    }
+    return;
+  }
+  
+  if (!hoveredCell) return;
+  const elementWithData = hoveredCell.querySelector("[data-employee]");
+  if (!elementWithData) return;
+  
+  const day = elementWithData.dataset.day;
+  const employee = decodeURIComponent(elementWithData.dataset.employee);
+  const entry = ensureMonth()[day]?.[employee];
+  if (!entry) return;
+
+  if (key === "c") {
+    copiedShift = entry.shift;
+    copiedLocation = entry.location;
+    copiedComment = entry.comment;
+    toast(`Copied: ${copiedShift} (${copiedLocation})`);
+  } else if (key === "v") {
+    if (!copiedShift) {
+      toast("No shift copied yet!");
+      return;
+    }
+    if (canEditEntry(employee, entry, "shift")) {
+      entry.shift = copiedShift;
+    }
+    if (canEditEntry(employee, entry, "location")) {
+      entry.location = copiedLocation;
+    }
+    if (canEditEntry(employee, entry, "comment")) {
+      entry.comment = copiedComment;
+    }
+    saveState();
+    render();
+    toast(`Pasted shift to ${employee}`);
+  }
+});
 
 bootstrap();

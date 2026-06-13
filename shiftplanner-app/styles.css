@@ -1916,3 +1916,36 @@ th {
     padding: 0;
   }
 }
+
+/* Native Fullscreen Mode styles */
+.workspace:fullscreen {
+  padding: 16px 24px !important;
+  background-color: var(--page) !important;
+  overflow-y: auto !important;
+}
+
+.workspace:fullscreen .topbar {
+  padding-bottom: 12px !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.workspace:fullscreen .schedule-table {
+  max-height: calc(100vh - 170px) !important;
+}
+
+/* Paintbrush planning mode styles */
+.paint-cursor-active .schedule-cell {
+  cursor: cell !important;
+}
+
+.paint-cursor-active .schedule-cell * {
+  cursor: cell !important;
+  pointer-events: none !important;
+}
+
+/* Restaurant Location Filter dimmed style */
+.schedule-cell.filtered-out-location {
+  opacity: 0.22 !important;
+  filter: grayscale(80%) !important;
+  pointer-events: none !important;
+}
