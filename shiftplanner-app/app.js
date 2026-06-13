@@ -76,6 +76,7 @@ const initialState = {
     week: "",
     twoWeek: "",
     threeWeek: "1",
+    payrollMode: false,
   },
   duplicate: {
     period: "week",
@@ -136,6 +137,7 @@ const el = {
   reportWeek: document.querySelector("#reportWeek"),
   reportTwoWeek: document.querySelector("#reportTwoWeek"),
   reportThreeWeek: document.querySelector("#reportThreeWeek"),
+  reportPayrollMode: document.querySelector("#reportPayrollMode"),
   reportPreview: document.querySelector("#reportPreview"),
   employeeFilter: document.querySelector("#employeeFilter"),
   copyLastWeek: document.querySelector("#copyLastWeek"),
@@ -469,9 +471,10 @@ function getEmployeePeriodStats(days, employees, config, data) {
   for (const employee of employees) {
     stats[employee] = {
       total: 0,
-      evening: 0,
+      weekdayEvening: 0,
       sunday: 0,
       holiday: 0,
+      sundayOrHolidayEvening: 0,
     };
     for (const day of days) {
       const entry = data[day]?.[employee];
@@ -480,12 +483,20 @@ function getEmployeePeriodStats(days, employees, config, data) {
       const hrs = hoursForEntry(entry);
       if (hrs <= 0) continue;
       const info = dayInfo(day);
+      const eve = eveningHoursForEntry(entry);
+      
       stats[employee].total += hrs;
-      stats[employee].evening += eveningHoursForEntry(entry);
+      
       if (info.isSunday) {
         stats[employee].sunday += hrs;
       } else if (info.holidayName) {
         stats[employee].holiday += hrs;
+      }
+      
+      if (info.isSunday || Boolean(info.holidayName)) {
+        stats[employee].sundayOrHolidayEvening += eve;
+      } else {
+        stats[employee].weekdayEvening += eve;
       }
     }
   }
@@ -816,6 +827,10 @@ function renderReportSelectors() {
   const threeWeekBlocks = duplicateBlocks("threeWeeks", state.year, state.month);
   if (!threeWeekBlocks.some((block) => block.value === state.report.threeWeek)) state.report.threeWeek = threeWeekBlocks[0]?.value ?? "";
   el.reportThreeWeek.innerHTML = threeWeekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.report.threeWeek ? "selected" : ""}>${esc(block.label)}</option>`).join("");
+
+  if (el.reportPayrollMode) {
+    el.reportPayrollMode.checked = Boolean(state.report.payrollMode);
+  }
 }
 
 function renderQuickDuplicateControls() {
@@ -1417,20 +1432,13 @@ function reportRestaurantTotalCards(config) {
 
 function reportWeekTotalRow(group, employees, config, data) {
   const stats = getEmployeePeriodStats(group.days, employees, config, data);
-  const hasEvening = employees.some(emp => stats[emp].evening > 0);
-  const hasSunday = employees.some(emp => stats[emp].sunday > 0);
-  const hasHoliday = employees.some(emp => stats[emp].holiday > 0);
-
   let html = `<tr class="report-total-row"><td></td><td>Total</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
 
-  if (hasEvening) {
-    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].evening)}</td>`).join("")}</tr>`;
-  }
-  if (hasSunday) {
-    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Sunday hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sunday)}</td>`).join("")}</tr>`;
-  }
-  if (hasHoliday) {
-    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Holiday hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
+  if (state.report.payrollMode) {
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Weekday evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].weekdayEvening)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Sunday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sunday)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Holiday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Sun/Holiday evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sundayOrHolidayEvening)}</td>`).join("")}</tr>`;
   }
   return html;
 }
@@ -1438,20 +1446,13 @@ function reportWeekTotalRow(group, employees, config, data) {
 function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) {
   const allDays = weekGroups.flatMap((group) => group.days);
   const stats = getEmployeePeriodStats(allDays, employees, config, data);
-  const hasEvening = employees.some(emp => stats[emp].evening > 0);
-  const hasSunday = employees.some(emp => stats[emp].sunday > 0);
-  const hasHoliday = employees.some(emp => stats[emp].holiday > 0);
-
   let html = `<tr class="report-total-row report-period-row"><td></td><td>${esc(periodLabel)}</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
 
-  if (hasEvening) {
-    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].evening)}</td>`).join("")}</tr>`;
-  }
-  if (hasSunday) {
-    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Sunday hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sunday)}</td>`).join("")}</tr>`;
-  }
-  if (hasHoliday) {
-    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Holiday hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
+  if (state.report.payrollMode) {
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Weekday evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].weekdayEvening)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Sunday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sunday)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Holiday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
+    html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Sun/Holiday evening (18-24)</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sundayOrHolidayEvening)}</td>`).join("")}</tr>`;
   }
   return html;
 }
@@ -2418,13 +2419,14 @@ document.addEventListener("change", (event) => {
     render();
     return;
   }
-  if ([el.reportType, el.reportEmployee, el.reportLocation, el.reportWeek, el.reportTwoWeek, el.reportThreeWeek].includes(event.target)) {
+  if ([el.reportType, el.reportEmployee, el.reportLocation, el.reportWeek, el.reportTwoWeek, el.reportThreeWeek, el.reportPayrollMode].includes(event.target)) {
     state.report.type = el.reportType.value;
     state.report.employee = el.reportEmployee.value;
     state.report.location = el.reportLocation.value;
     state.report.week = el.reportWeek.value;
     state.report.twoWeek = el.reportTwoWeek.value;
     state.report.threeWeek = el.reportThreeWeek.value;
+    state.report.payrollMode = el.reportPayrollMode ? el.reportPayrollMode.checked : false;
     saveState();
     render();
     return;
