@@ -158,11 +158,6 @@ const el = {
   paintControls: document.querySelector("#paintControls"),
   paintShift: document.querySelector("#paintShift"),
   paintLocation: document.querySelector("#paintLocation"),
-  copyLastWeek: document.querySelector("#copyLastWeek"),
-  copyLastThreeWeeks: document.querySelector("#copyLastThreeWeeks"),
-  copyLastMonth: document.querySelector("#copyLastMonth"),
-  quickTargetWeek: document.querySelector("#quickTargetWeek"),
-  quickTargetThreeWeeks: document.querySelector("#quickTargetThreeWeeks"),
   employeeEditor: document.querySelector("#employeeEditor"),
   locationEditor: document.querySelector("#locationEditor"),
   employerEditor: document.querySelector("#employerEditor"),
@@ -174,12 +169,23 @@ const el = {
   newEmployerEmail: document.querySelector("#newEmployerEmail"),
   newEmployerUsername: document.querySelector("#newEmployerUsername"),
   newEmployerPassword: document.querySelector("#newEmployerPassword"),
-  duplicatePeriod: document.querySelector("#duplicatePeriod"),
-  duplicateFromBlock: document.querySelector("#duplicateFromBlock"),
-  duplicateYear: document.querySelector("#duplicateYear"),
-  duplicateMonth: document.querySelector("#duplicateMonth"),
-  duplicateToBlock: document.querySelector("#duplicateToBlock"),
-  duplicateShifts: document.querySelector("#duplicateShifts"),
+  openDuplicateBtn: document.querySelector("#openDuplicateBtn"),
+  publishDropdownBtn: document.querySelector("#publishDropdownBtn"),
+  publishMenu: document.querySelector("#publishMenu"),
+  publishWeekBtn: document.querySelector("#publishWeekBtn"),
+  publishThreeWeeksBtn: document.querySelector("#publishThreeWeeksBtn"),
+  publishMonthBtn: document.querySelector("#publishMonthBtn"),
+  duplicateModal: document.querySelector("#duplicateModal"),
+  closeDuplicateModal: document.querySelector("#closeDuplicateModal"),
+  modalDupPeriod: document.querySelector("#modalDupPeriod"),
+  modalFromYear: document.querySelector("#modalFromYear"),
+  modalFromMonth: document.querySelector("#modalFromMonth"),
+  modalFromBlock: document.querySelector("#modalFromBlock"),
+  modalToYear: document.querySelector("#modalToYear"),
+  modalToMonth: document.querySelector("#modalToMonth"),
+  modalToBlock: document.querySelector("#modalToBlock"),
+  cancelDuplicateModal: document.querySelector("#cancelDuplicateModal"),
+  confirmDuplicateModal: document.querySelector("#confirmDuplicateModal"),
   toast: document.querySelector("#toast"),
 };
 
@@ -806,7 +812,6 @@ function renderSelectors() {
   }
 
   renderReportSelectors();
-  renderQuickDuplicateControls();
 }
 
 function renderSelect(select, values, selectedValue) {
@@ -870,15 +875,6 @@ function renderReportSelectors() {
   }
 }
 
-function renderQuickDuplicateControls() {
-  if (!el.quickTargetWeek || !el.quickTargetThreeWeeks) return;
-  const weekBlocks = duplicateBlocks("week", state.year, state.month);
-  const threeWeekBlocks = duplicateBlocks("threeWeeks", state.year, state.month);
-  if (!weekBlocks.some((block) => block.value === state.quickDuplicate.targetWeek)) state.quickDuplicate.targetWeek = weekBlocks[0]?.value ?? "";
-  if (!threeWeekBlocks.some((block) => block.value === state.quickDuplicate.targetThreeWeeks)) state.quickDuplicate.targetThreeWeeks = threeWeekBlocks[0]?.value ?? "";
-  el.quickTargetWeek.innerHTML = weekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.quickDuplicate.targetWeek ? "selected" : ""}>${esc(block.label)}</option>`).join("");
-  el.quickTargetThreeWeeks.innerHTML = threeWeekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.quickDuplicate.targetThreeWeeks ? "selected" : ""}>${esc(block.label)}</option>`).join("");
-}
 
 function renderShell() {
   el.pageTitle.textContent = `${monthNames[state.month]} ${state.year} Schedule`;
@@ -1255,7 +1251,6 @@ function renderWeeks() {
 }
 
 function renderSettings() {
-  renderDuplicateControls();
   renderHistory();
   el.employeeEditor.innerHTML = state.employees
     .map(
@@ -1325,36 +1320,6 @@ function renderHistory() {
       .join("") || `<p class="empty-note">No saved history yet.</p>`;
 }
 
-function renderDuplicateControls() {
-  if (!el.duplicatePeriod) return;
-  const duplicate = state.duplicate;
-  duplicate.targetYear = Number(duplicate.targetYear || state.year);
-  duplicate.targetMonth = Number.isFinite(Number(duplicate.targetMonth)) ? Number(duplicate.targetMonth) : state.month;
-
-  el.duplicatePeriod.value = duplicate.period;
-  el.duplicateYear.innerHTML = "";
-  for (let year = 2026; year <= 2030; year += 1) {
-    const option = new Option(year, year);
-    option.selected = year === Number(duplicate.targetYear);
-    el.duplicateYear.append(option);
-  }
-  el.duplicateMonth.innerHTML = "";
-  monthNames.forEach((name, index) => {
-    const option = new Option(name, index);
-    option.selected = index === Number(duplicate.targetMonth);
-    el.duplicateMonth.append(option);
-  });
-
-  const fromBlocks = duplicateBlocks(duplicate.period, state.year, state.month);
-  const toBlocks = duplicateBlocks(duplicate.period, Number(duplicate.targetYear), Number(duplicate.targetMonth));
-  if (!fromBlocks.some((block) => block.value === duplicate.fromBlock)) duplicate.fromBlock = fromBlocks[0]?.value ?? "";
-  if (!toBlocks.some((block) => block.value === duplicate.targetBlock)) duplicate.targetBlock = toBlocks[0]?.value ?? "";
-
-  el.duplicateFromBlock.innerHTML = fromBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === duplicate.fromBlock ? "selected" : ""}>${esc(block.label)}</option>`).join("");
-  el.duplicateToBlock.innerHTML = toBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === duplicate.targetBlock ? "selected" : ""}>${esc(block.label)}</option>`).join("");
-  el.duplicateFromBlock.disabled = duplicate.period === "month";
-  el.duplicateToBlock.disabled = duplicate.period === "month";
-}
 
 function getReportConfig() {
   const type = isEmployee() && !["week", "twoWeeks", "threeWeeks"].includes(state.report.type) ? "employee" : state.report.type;
@@ -1675,10 +1640,287 @@ function publishPeriod(period, targetValue = "") {
 }
 
 function publishButtonState() {
-  ["#publishWeek", "#publishThreeWeeks", "#publishMonth"].forEach((selector) => {
-    const button = document.querySelector(selector);
-    if (button) button.hidden = !isEmployer();
+  const isEmp = isEmployer();
+  if (el.openDuplicateBtn) {
+    el.openDuplicateBtn.style.display = isEmp ? "flex" : "none";
+  }
+  const publishContainer = document.querySelector(".publish-dropdown-container");
+  if (publishContainer) {
+    publishContainer.style.display = isEmp ? "inline-block" : "none";
+  }
+}
+
+function toggleDuplicateModal(show) {
+  if (!el.duplicateModal) return;
+  if (show) {
+    if (!el.modalFromYear.options.length) {
+      el.modalFromYear.innerHTML = "";
+      el.modalToYear.innerHTML = "";
+      for (let year = 2026; year <= 2030; year++) {
+        el.modalFromYear.add(new Option(year, year));
+        el.modalToYear.add(new Option(year, year));
+      }
+    }
+    if (!el.modalFromMonth.options.length) {
+      el.modalFromMonth.innerHTML = "";
+      el.modalToMonth.innerHTML = "";
+      monthNames.forEach((name, idx) => {
+        el.modalFromMonth.add(new Option(name, idx));
+        el.modalToMonth.add(new Option(name, idx));
+      });
+    }
+
+    el.modalDupPeriod.value = "week";
+    el.modalFromYear.value = state.year;
+    el.modalFromMonth.value = state.month;
+    el.modalToYear.value = state.year;
+    el.modalToMonth.value = state.month;
+
+    updateModalBlocks();
+    el.duplicateModal.style.display = "flex";
+  } else {
+    el.duplicateModal.style.display = "none";
+  }
+}
+
+function updateModalBlocks() {
+  const period = el.modalDupPeriod.value;
+  const fromYear = Number(el.modalFromYear.value);
+  const fromMonth = Number(el.modalFromMonth.value);
+  const toYear = Number(el.modalToYear.value);
+  const toMonth = Number(el.modalToMonth.value);
+
+  const isMonth = period === "month";
+  const fromBlockLabel = document.getElementById("modalFromBlockLabel");
+  const toBlockLabel = document.getElementById("modalToBlockLabel");
+
+  if (isMonth) {
+    if (fromBlockLabel) fromBlockLabel.style.display = "none";
+    if (toBlockLabel) toBlockLabel.style.display = "none";
+  } else {
+    if (fromBlockLabel) fromBlockLabel.style.display = "flex";
+    if (toBlockLabel) toBlockLabel.style.display = "flex";
+
+    const fromBlocks = duplicateBlocks(period, fromYear, fromMonth);
+    const toBlocks = duplicateBlocks(period, toYear, toMonth);
+
+    const prevFromVal = el.modalFromBlock.value;
+    const prevToVal = el.modalToBlock.value;
+
+    el.modalFromBlock.innerHTML = fromBlocks.map(b => `<option value="${esc(b.value)}">${esc(b.label)}</option>`).join("");
+    el.modalToBlock.innerHTML = toBlocks.map(b => `<option value="${esc(b.value)}">${esc(b.label)}</option>`).join("");
+
+    if (fromBlocks.some(b => b.value === prevFromVal)) el.modalFromBlock.value = prevFromVal;
+    if (toBlocks.some(b => b.value === prevToVal)) el.modalToBlock.value = prevToVal;
+  }
+}
+
+function executeModalDuplicate() {
+  if (!isEmployer()) return;
+  const period = el.modalDupPeriod.value;
+  const fromYear = Number(el.modalFromYear.value);
+  const fromMonth = Number(el.modalFromMonth.value);
+  const toYear = Number(el.modalToYear.value);
+  const toMonth = Number(el.modalToMonth.value);
+
+  const sourceBlocks = duplicateBlocks(period, fromYear, fromMonth);
+  const targetBlocks = duplicateBlocks(period, toYear, toMonth);
+
+  let sourceBlock, targetBlock;
+  if (period === "month") {
+    sourceBlock = sourceBlocks[0];
+    targetBlock = targetBlocks[0];
+  } else {
+    sourceBlock = sourceBlocks.find(b => b.value === el.modalFromBlock.value) ?? sourceBlocks[0];
+    targetBlock = targetBlocks.find(b => b.value === el.modalToBlock.value) ?? targetBlocks[0];
+  }
+
+  if (!sourceBlock || !targetBlock) {
+    toast("Choose source and target period");
+    return;
+  }
+
+  recordUndoSnapshot();
+
+  const copyLength = Math.min(sourceBlock.dates.length, targetBlock.dates.length);
+  for (let index = 0; index < copyLength; index += 1) {
+    const sourceDate = sourceBlock.dates[index];
+    const targetDate = targetBlock.dates[index];
+    const sourceDayData = dataForDate(sourceDate);
+    const targetData = ensureMonth(targetDate.getFullYear(), targetDate.getMonth());
+    const targetDay = targetDate.getDate();
+    
+    targetData[targetDay] ??= {};
+    for (const employee of state.employees) {
+      targetData[targetDay][employee] = copyEntry(sourceDayData?.[employee]);
+    }
+  }
+
+  logHistory(`Duplicated ${period} to ${monthNames[toMonth]} ${toYear}`);
+  state.year = toYear;
+  state.month = toMonth;
+  
+  saveState(true);
+  render();
+  toggleDuplicateModal(false);
+  toast(`Duplicated ${copyLength} days to ${monthNames[toMonth]} ${toYear}`);
+}
+
+function showPublishSelectModal(title, blocks, callback) {
+  const modal = document.createElement("div");
+  modal.className = "publish-select-modal";
+  Object.assign(modal.style, {
+    position: "fixed",
+    inset: "0",
+    background: "rgba(31, 58, 90, 0.4)",
+    zIndex: "1000",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backdropFilter: "blur(4px)"
   });
+
+  const card = document.createElement("div");
+  Object.assign(card.style, {
+    background: "#fff",
+    padding: "24px",
+    borderRadius: "8px",
+    width: "min(400px, 90%)",
+    boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px"
+  });
+
+  const header = document.createElement("div");
+  Object.assign(header.style, {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottom: "1px solid var(--line)",
+    paddingBottom: "10px"
+  });
+
+  const h3 = document.createElement("h3");
+  h3.textContent = title;
+  Object.assign(h3.style, {
+    margin: "0",
+    color: "var(--navy)",
+    fontSize: "18px"
+  });
+
+  const closeBtn = document.createElement("button");
+  closeBtn.innerHTML = "&times;";
+  Object.assign(closeBtn.style, {
+    background: "none",
+    border: "0",
+    fontSize: "20px",
+    cursor: "pointer",
+    color: "var(--muted)"
+  });
+  closeBtn.onclick = () => modal.remove();
+
+  header.append(h3, closeBtn);
+
+  const selectLabel = document.createElement("label");
+  selectLabel.textContent = "Select Period to Publish";
+  Object.assign(selectLabel.style, {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    fontSize: "12px",
+    fontWeight: "bold",
+    color: "var(--muted)",
+    textAlign: "left"
+  });
+
+  const select = document.createElement("select");
+  select.className = "filter-input";
+  Object.assign(select.style, {
+    width: "100%",
+    height: "38px",
+    border: "1px solid var(--line)",
+    borderRadius: "6px",
+    padding: "0 10px"
+  });
+
+  blocks.forEach(block => {
+    const opt = new Option(block.label, block.value);
+    select.add(opt);
+  });
+
+  selectLabel.append(select);
+
+  const footer = document.createElement("div");
+  Object.assign(footer.style, {
+    display: "flex",
+    gap: "10px",
+    justifyContent: "flex-end",
+    borderTop: "1px solid var(--line)",
+    paddingTop: "14px",
+    marginTop: "10px"
+  });
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "quiet-button";
+  cancelBtn.textContent = "Cancel";
+  Object.assign(cancelBtn.style, {
+    padding: "8px 16px",
+    border: "1px solid var(--line)",
+    borderRadius: "6px",
+    background: "#fff",
+    cursor: "pointer"
+  });
+  cancelBtn.onclick = () => modal.remove();
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.className = "primary-button";
+  confirmBtn.textContent = "Publish Shifts";
+  Object.assign(confirmBtn.style, {
+    cursor: "pointer"
+  });
+  confirmBtn.onclick = () => {
+    callback(select.value);
+    modal.remove();
+  };
+
+  footer.append(cancelBtn, confirmBtn);
+  card.append(header, selectLabel, footer);
+  modal.append(card);
+  document.body.append(modal);
+}
+
+function publishCurrentWeek() {
+  if (!isEmployer()) return;
+  const blocks = duplicateBlocks("week", state.year, state.month);
+  if (!blocks.length) {
+    toast("No weeks found for the current month");
+    return;
+  }
+  showPublishSelectModal("📢 Publish Week", blocks, (targetValue) => {
+    publishPeriod("week", targetValue);
+  });
+}
+
+function publishCurrentThreeWeeks() {
+  if (!isEmployer()) return;
+  const blocks = duplicateBlocks("threeWeeks", state.year, state.month);
+  if (!blocks.length) {
+    toast("No 3-week periods found for the current month");
+    return;
+  }
+  showPublishSelectModal("📢 Publish 3 Weeks", blocks, (targetValue) => {
+    publishPeriod("threeWeeks", targetValue);
+  });
+}
+
+function publishCurrentMonth() {
+  if (!isEmployer()) return;
+  if (confirm(`Are you sure you want to publish the entire month of ${monthNames[state.month]} ${state.year}?`)) {
+    publishPeriod("month");
+  }
 }
 
 function seedMaySample() {
@@ -1730,39 +1972,7 @@ function manualSave() {
   renderSettings();
 }
 
-function duplicateShifts() {
-  if (!isEmployer()) return;
-  recordUndoSnapshot();
-  const duplicate = state.duplicate;
-  const sourceBlocks = duplicateBlocks(duplicate.period, state.year, state.month);
-  const targetYear = Number(duplicate.targetYear);
-  const targetMonth = Number(duplicate.targetMonth);
-  const targetBlocks = duplicateBlocks(duplicate.period, targetYear, targetMonth);
-  const sourceBlock = sourceBlocks.find((block) => block.value === duplicate.fromBlock) ?? sourceBlocks[0];
-  const targetBlock = targetBlocks.find((block) => block.value === duplicate.targetBlock) ?? targetBlocks[0];
-  if (!sourceBlock || !targetBlock) {
-    toast("Choose source and target period");
-    return;
-  }
-  const copyLength = Math.min(sourceBlock.dates.length, targetBlock.dates.length);
-  for (let index = 0; index < copyLength; index += 1) {
-    const sourceDate = sourceBlock.dates[index];
-    const targetDate = targetBlock.dates[index];
-    const sourceDayData = dataForDate(sourceDate);
-    const targetData = ensureMonth(targetDate.getFullYear(), targetDate.getMonth());
-    const targetDay = targetDate.getDate();
-    targetData[targetDay] ??= {};
-    for (const employee of state.employees) {
-      targetData[targetDay][employee] = copyEntry(sourceDayData?.[employee]);
-    }
-  }
-  logHistory(`Duplicated ${duplicate.period} to ${monthNames[targetMonth]} ${targetYear}`);
-  state.year = targetYear;
-  state.month = targetMonth;
-  saveState(true);
-  render();
-  toast(`Duplicated ${copyLength} days`);
-}
+
 
 function monthBefore(year = state.year, month = state.month) {
   const date = new Date(year, month - 1, 1);
@@ -1785,49 +1995,6 @@ function copyEntry(entry) {
   };
 }
 
-function duplicateRecentDays(dayCount, label, targetValue = "") {
-  if (!isEmployer()) return;
-  recordUndoSnapshot();
-  const period = dayCount === 21 ? "threeWeeks" : "week";
-  const targetBlocks = duplicateBlocks(period, state.year, state.month);
-  const targetBlock = targetBlocks.find((block) => block.value === targetValue) ?? targetBlocks[0];
-  const targetDates = targetBlock?.dates ?? dateRange(new Date(state.year, state.month, 1), Math.min(dayCount, daysInMonth()));
-  const sourceStart = addDays(targetDates[0], -dayCount);
-  for (let offset = 0; offset < targetDates.length; offset += 1) {
-    const sourceDate = addDays(sourceStart, offset);
-    const targetDate = targetDates[offset];
-    const targetData = ensureMonth(targetDate.getFullYear(), targetDate.getMonth());
-    const targetDay = targetDate.getDate();
-    targetData[targetDay] ??= {};
-    const sourceDayData = dataForDate(sourceDate);
-    for (const employee of state.employees) {
-      targetData[targetDay][employee] = copyEntry(sourceDayData?.[employee]);
-    }
-  }
-  logHistory(`Copied ${label} into ${targetBlock?.label ?? "current period"}`);
-  saveState(true);
-  render();
-  toast(`Copied ${label}`);
-}
-
-function duplicateLastMonth() {
-  if (!isEmployer()) return;
-  recordUndoSnapshot();
-  const previous = monthBefore();
-  const sourceData = ensureMonth(previous.year, previous.month);
-  const targetData = ensureMonth(state.year, state.month);
-  const copyLength = Math.min(daysInSpecificMonth(previous.year, previous.month), daysInMonth());
-  for (let day = 1; day <= copyLength; day += 1) {
-    targetData[day] ??= {};
-    for (const employee of state.employees) {
-      targetData[day][employee] = copyEntry(sourceData[day]?.[employee]);
-    }
-  }
-  logHistory(`Copied last month into ${monthNames[state.month]} ${state.year}`);
-  saveState(true);
-  render();
-  toast("Copied last month");
-}
 
 function addEmployee() {
   if (!isEmployer()) return;
@@ -2493,22 +2660,6 @@ document.addEventListener("change", (event) => {
     render();
     return;
   }
-  if ([el.duplicatePeriod, el.duplicateFromBlock, el.duplicateYear, el.duplicateMonth, el.duplicateToBlock].includes(event.target)) {
-    state.duplicate.period = el.duplicatePeriod.value;
-    state.duplicate.fromBlock = el.duplicateFromBlock.value;
-    state.duplicate.targetYear = Number(el.duplicateYear.value);
-    state.duplicate.targetMonth = Number(el.duplicateMonth.value);
-    state.duplicate.targetBlock = el.duplicateToBlock.value;
-    saveState();
-    renderSettings();
-    return;
-  }
-  if ([el.quickTargetWeek, el.quickTargetThreeWeeks].includes(event.target)) {
-    state.quickDuplicate.targetWeek = el.quickTargetWeek.value;
-    state.quickDuplicate.targetThreeWeeks = el.quickTargetThreeWeeks.value;
-    saveState();
-    return;
-  }
   if (event.target.matches("[data-field]")) {
     updateEntry(event.target);
     return;
@@ -2642,13 +2793,67 @@ document.querySelector("#addEmployee").addEventListener("click", addEmployee);
 document.querySelector("#addLocation").addEventListener("click", addLocation);
 document.querySelector("#addEmployer").addEventListener("click", addEmployer);
 document.querySelector("#openReport").addEventListener("click", openReportWindow);
-el.copyLastWeek.addEventListener("click", () => duplicateRecentDays(7, "last week", state.quickDuplicate.targetWeek));
-el.copyLastThreeWeeks.addEventListener("click", () => duplicateRecentDays(21, "last 3 weeks", state.quickDuplicate.targetThreeWeeks));
-el.copyLastMonth.addEventListener("click", duplicateLastMonth);
-document.querySelector("#publishWeek").addEventListener("click", () => publishPeriod("week", state.quickDuplicate.targetWeek));
-document.querySelector("#publishThreeWeeks").addEventListener("click", () => publishPeriod("threeWeeks", state.quickDuplicate.targetThreeWeeks));
-document.querySelector("#publishMonth").addEventListener("click", () => publishPeriod("month"));
-el.duplicateShifts.addEventListener("click", duplicateShifts);
+
+if (el.openDuplicateBtn) {
+    el.openDuplicateBtn.addEventListener("click", () => toggleDuplicateModal(true));
+  }
+  if (el.closeDuplicateModal) {
+    el.closeDuplicateModal.addEventListener("click", () => toggleDuplicateModal(false));
+  }
+  if (el.cancelDuplicateModal) {
+    el.cancelDuplicateModal.addEventListener("click", () => toggleDuplicateModal(false));
+  }
+  if (el.confirmDuplicateModal) {
+    el.confirmDuplicateModal.addEventListener("click", executeModalDuplicate);
+  }
+
+  [
+    el.modalDupPeriod,
+    el.modalFromYear,
+    el.modalFromMonth,
+    el.modalToYear,
+    el.modalToMonth
+  ].forEach(select => {
+    if (select) {
+      select.addEventListener("change", updateModalBlocks);
+    }
+  });
+
+  if (el.publishDropdownBtn) {
+    el.publishDropdownBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isVisible = el.publishMenu.style.display === "flex";
+      el.publishMenu.style.display = isVisible ? "none" : "flex";
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (el.publishMenu && el.publishMenu.style.display === "flex") {
+      if (!e.target.closest(".publish-dropdown-container")) {
+        el.publishMenu.style.display = "none";
+      }
+    }
+  });
+
+  if (el.publishWeekBtn) {
+    el.publishWeekBtn.addEventListener("click", () => {
+      if (el.publishMenu) el.publishMenu.style.display = "none";
+      publishCurrentWeek();
+    });
+  }
+  if (el.publishThreeWeeksBtn) {
+    el.publishThreeWeeksBtn.addEventListener("click", () => {
+      if (el.publishMenu) el.publishMenu.style.display = "none";
+      publishCurrentThreeWeeks();
+    });
+  }
+  if (el.publishMonthBtn) {
+    el.publishMonthBtn.addEventListener("click", () => {
+      if (el.publishMenu) el.publishMenu.style.display = "none";
+      publishCurrentMonth();
+    });
+  }
+
 el.setupForm.addEventListener("submit", createFirstEmployer);
 el.loginForm.addEventListener("submit", login);
 el.inviteForm.addEventListener("submit", createEmployeeLogin);
