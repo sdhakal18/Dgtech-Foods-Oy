@@ -71,6 +71,9 @@ let copiedShift = null;
 let copiedLocation = null;
 let copiedComment = null;
 
+const undoStack = [];
+const maxUndoDepth = 40;
+
 const initialState = {
   year: 2026,
   month: 4,
@@ -148,6 +151,7 @@ const el = {
   reportPayrollMode: document.querySelector("#reportPayrollMode"),
   reportPreview: document.querySelector("#reportPreview"),
   employeeFilter: document.querySelector("#employeeFilter"),
+  undoBtn: document.querySelector("#undoBtn"),
   fullscreenBtn: document.querySelector("#fullscreenBtn"),
   locationFilter: document.querySelector("#locationFilter"),
   paintToggleBtn: document.querySelector("#paintToggleBtn"),
@@ -1585,6 +1589,7 @@ function render() {
   renderSettings();
   renderReportPreview();
   publishButtonState();
+  updateUndoButtonVisibility();
   document.querySelectorAll(".nav-tab").forEach((button) => button.classList.toggle("active", button.dataset.view === state.view));
   document.querySelectorAll(".view-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `${state.view}View`));
 }
@@ -1596,6 +1601,7 @@ function updateEntry(target) {
   if (!day || !employee || !field) return;
   const entry = ensureMonth()[day][employee];
   if (!canEditEntry(employee, entry, field)) return;
+  recordUndoSnapshot();
   if (field === "shift") {
     const nextValue = normalizeShift(target.value);
     if (isEmployee() && !["", "00:00-00:00", "Wish OFF"].includes(nextValue)) {
@@ -1677,6 +1683,7 @@ function publishButtonState() {
 
 function seedMaySample() {
   if (!isEmployer()) return;
+  recordUndoSnapshot();
   state.year = 2026;
   state.month = 4;
   const data = {};
@@ -1703,6 +1710,7 @@ function seedMaySample() {
 
 function blankMonth() {
   if (!isEmployer()) return;
+  recordUndoSnapshot();
   const data = {};
   for (let day = 1; day <= daysInMonth(); day += 1) {
     data[day] = {};
@@ -1724,6 +1732,7 @@ function manualSave() {
 
 function duplicateShifts() {
   if (!isEmployer()) return;
+  recordUndoSnapshot();
   const duplicate = state.duplicate;
   const sourceBlocks = duplicateBlocks(duplicate.period, state.year, state.month);
   const targetYear = Number(duplicate.targetYear);
@@ -1778,6 +1787,7 @@ function copyEntry(entry) {
 
 function duplicateRecentDays(dayCount, label, targetValue = "") {
   if (!isEmployer()) return;
+  recordUndoSnapshot();
   const period = dayCount === 21 ? "threeWeeks" : "week";
   const targetBlocks = duplicateBlocks(period, state.year, state.month);
   const targetBlock = targetBlocks.find((block) => block.value === targetValue) ?? targetBlocks[0];
@@ -1802,6 +1812,7 @@ function duplicateRecentDays(dayCount, label, targetValue = "") {
 
 function duplicateLastMonth() {
   if (!isEmployer()) return;
+  recordUndoSnapshot();
   const previous = monthBefore();
   const sourceData = ensureMonth(previous.year, previous.month);
   const targetData = ensureMonth(state.year, state.month);
@@ -2620,6 +2631,9 @@ document.addEventListener("click", (event) => {
 });
 
 document.querySelector("#saveNow").addEventListener("click", manualSave);
+if (el.undoBtn) {
+  el.undoBtn.addEventListener("click", undo);
+}
 document.querySelector("#printPage").addEventListener("click", () => window.print());
 document.querySelector("#seedMay").addEventListener("click", seedMaySample);
 document.querySelector("#blankMonth").addEventListener("click", blankMonth);
@@ -2672,6 +2686,32 @@ async function bootstrap() {
   } finally {
     bootstrapping = false;
     render();
+  }
+}
+
+function recordUndoSnapshot() {
+  if (undoStack.length >= maxUndoDepth) {
+    undoStack.shift();
+  }
+  undoStack.push(structuredClone(state.months));
+  updateUndoButtonVisibility();
+}
+
+function undo() {
+  if (undoStack.length === 0) {
+    toast("Nothing to undo");
+    return;
+  }
+  const previousMonths = undoStack.pop();
+  state.months = previousMonths;
+  saveState(true);
+  render();
+  toast("Undo successful");
+}
+
+function updateUndoButtonVisibility() {
+  if (el.undoBtn) {
+    el.undoBtn.style.display = (undoStack.length > 0 && isEmployer()) ? "flex" : "none";
   }
 }
 
@@ -2751,6 +2791,7 @@ document.addEventListener("click", (event) => {
   const entry = ensureMonth()[day]?.[employee];
   
   if (entry) {
+    recordUndoSnapshot();
     if (canEditEntry(employee, entry, "shift")) {
       entry.shift = paintShiftValue;
     }
@@ -2783,6 +2824,13 @@ document.addEventListener("mouseout", (event) => {
 
 // Keydown listener for keyboard shortcuts and Esc
 window.addEventListener("keydown", (event) => {
+  const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z";
+  if (isUndo) {
+    event.preventDefault();
+    undo();
+    return;
+  }
+
   if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
     return;
   }
@@ -2815,6 +2863,7 @@ window.addEventListener("keydown", (event) => {
       toast("No shift copied yet!");
       return;
     }
+    recordUndoSnapshot();
     if (canEditEntry(employee, entry, "shift")) {
       entry.shift = copiedShift;
     }
