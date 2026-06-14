@@ -1250,8 +1250,8 @@ th {
 }
 
 .matrix-report .report-period-header-row td {
-  background: #111827;
-  color: #ffffff;
+  background: #f3f4f6;
+  color: #111827;
   font-weight: 900;
   text-align: center;
   font-size: 13px;
@@ -1262,9 +1262,9 @@ th {
 }
 
 .matrix-report .report-period-row td {
-  background: #2f7d1d;
+  background: #c2f0b4;
   border: 2.5px solid #111827;
-  color: #ffffff;
+  color: #111827;
 }
 
 .matrix-report .report-period-row.report-breakdown-row td {
