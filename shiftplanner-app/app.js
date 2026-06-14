@@ -1536,7 +1536,6 @@ function openReportWindow() {
   const year = state.year;
   const isPayroll = state.report.payrollMode;
   let titleStr = "";
-  const isMonthExtraction = ["month", "employee", "restaurant"].includes(config.type);
 
   if (config.type === "week") {
     titleStr = `Dgtech foods oy_Shift_Week${state.report.week}_${monthName}`;
@@ -1545,14 +1544,10 @@ function openReportWindow() {
   } else if (config.type === "threeWeeks") {
     titleStr = `Dgtech foods oy_Shift_3Weeks_${monthName}`;
   } else {
-    if (isPayroll) {
-      titleStr = `${monthName}_Payroll`;
-    } else {
-      titleStr = `Dgtech foods oy_Shift_${monthName}`;
-    }
+    titleStr = `Dgtech foods oy_Shift_${monthName}`;
   }
 
-  if (!isMonthExtraction && isPayroll) {
+  if (isPayroll) {
     titleStr += "_Payroll";
   }
 
