@@ -1262,12 +1262,15 @@ th {
 }
 
 .matrix-report .report-period-row td {
-  background: #c2f0b4;
+  background: #49a52c;
   border: 2.5px solid #111827;
-  color: #111827;
+  color: #000000;
 }
 
 .matrix-report .report-period-row.report-breakdown-row td {
+  background: #c2f0b4;
+  color: #111827;
+  font-weight: 700;
   border: 2.5px solid #111827;
 }
 
