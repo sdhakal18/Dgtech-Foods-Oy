@@ -1523,7 +1523,33 @@ function setReportControl(id, visible) {
 }
 
 function openReportWindow() {
-  const html = buildReportHtml();
+  const config = getReportConfig();
+  const html = buildReportHtml(config);
+  
+  const monthName = monthNames[state.month];
+  const year = state.year;
+  const isPayroll = state.report.payrollMode;
+  let titleStr = "";
+  const isMonthExtraction = ["month", "employee", "restaurant"].includes(config.type);
+
+  if (config.type === "week") {
+    titleStr = `Dgtech foods oy_Shift_Week${state.report.week}_${monthName}`;
+  } else if (config.type === "twoWeeks") {
+    titleStr = `Dgtech foods oy_Shift_2Weeks_${monthName}`;
+  } else if (config.type === "threeWeeks") {
+    titleStr = `Dgtech foods oy_Shift_3Weeks_${monthName}`;
+  } else {
+    if (isPayroll) {
+      titleStr = `${monthName}_Payroll`;
+    } else {
+      titleStr = `Dgtech foods oy_Shift_${monthName}`;
+    }
+  }
+
+  if (!isMonthExtraction && isPayroll) {
+    titleStr += "_Payroll";
+  }
+
   const reportWindow = window.open("", "_blank");
   if (!reportWindow) {
     toast("Allow popups to open PDF view");
@@ -1533,7 +1559,7 @@ function openReportWindow() {
     <!doctype html>
     <html>
       <head>
-        <title>Dgtech foods Oy report</title>
+        <title>${esc(titleStr)}</title>
         <link rel="stylesheet" href="./styles.css">
       </head>
       <body class="print-body">
@@ -3049,11 +3075,17 @@ document.addEventListener("click", (event) => {
   }
 });
 
-document.querySelector("#saveNow").addEventListener("click", manualSave);
+const saveNowBtn = document.querySelector("#saveNow");
+if (saveNowBtn) {
+  saveNowBtn.addEventListener("click", manualSave);
+}
 if (el.undoBtn) {
   el.undoBtn.addEventListener("click", undo);
 }
-document.querySelector("#printPage").addEventListener("click", () => window.print());
+const printPageBtn = document.querySelector("#printPage");
+if (printPageBtn) {
+  printPageBtn.addEventListener("click", () => window.print());
+}
 document.querySelector("#seedMay").addEventListener("click", seedMaySample);
 document.querySelector("#blankMonth").addEventListener("click", blankMonth);
 document.querySelector("#exportData").addEventListener("click", exportData);

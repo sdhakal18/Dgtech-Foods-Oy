@@ -1115,7 +1115,7 @@ th {
 .print-report {
   background: #fff;
   color: var(--ink);
-  border: 2px solid var(--navy);
+  border: 2.5px solid #111827;
   border-radius: 8px;
   padding: 18px;
 }
@@ -1169,21 +1169,22 @@ th {
 }
 
 .print-report table {
-  border: 2px solid var(--navy);
+  border: 2px solid #111827;
   border-collapse: collapse;
 }
 
 .print-report th,
 .print-report td {
-  border: 1.5px solid #8aa1b8;
+  border: 1.5px solid #111827;
 }
 
 .print-report th {
-  background: var(--navy);
+  background: #111827;
+  color: #ffffff;
 }
 
 .print-report .report-name-cell {
-  border: 2px solid var(--navy);
+  border: 2px solid #111827;
   background: #f8fbff;
   font-weight: 800;
   text-align: left;
@@ -1236,20 +1237,21 @@ th {
 
 .matrix-report thead th {
   background: #1ca1d0;
-  border-color: #111827;
+  border: 1.5px solid #111827;
   color: #000000;
   font-weight: 900;
 }
 
 .matrix-report .report-total-row td {
   background: #49a52c;
-  border-color: #111827;
+  border: 1.5px solid #111827;
   color: #000000;
   font-weight: 900;
 }
 
 .matrix-report .report-period-row td {
   background: #2f7d1d;
+  border: 1.5px solid #111827;
   color: #ffffff;
 }
 
@@ -1257,7 +1259,7 @@ th {
   background: var(--soft-blue);
   color: var(--navy);
   font-weight: 700;
-  border-top: 1px dashed #8aa1b8;
+  border: 1.5px solid #111827;
 }
 
 .report-week-total,
@@ -1880,6 +1882,11 @@ th {
 }
 
 @media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
   .sidebar,
   .top-actions,
   .table-toolbar,
@@ -1915,6 +1922,25 @@ th {
 
   .print-body {
     padding: 0;
+    margin: 0;
+    width: 100% !important;
+  }
+
+  .print-report {
+    border: 2.5px solid #000000 !important;
+    border-radius: 4px;
+    padding: 12px;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .matrix-report {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    border: 2px solid #000000 !important;
   }
 }
 
