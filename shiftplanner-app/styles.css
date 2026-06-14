@@ -1251,8 +1251,12 @@ th {
 
 .matrix-report .report-period-row td {
   background: #2f7d1d;
-  border: 1.5px solid #111827;
+  border: 2.5px solid #111827;
   color: #ffffff;
+}
+
+.matrix-report .report-period-row.report-breakdown-row td {
+  border: 2.5px solid #111827;
 }
 
 .matrix-report .report-total-row.report-breakdown-row td {
@@ -1882,6 +1886,11 @@ th {
 }
 
 @media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   @page {
     size: landscape;
     margin: 8mm;
