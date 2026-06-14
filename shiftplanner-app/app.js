@@ -1460,7 +1460,13 @@ function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) 
   const allDays = weekGroups.flatMap((group) => group.days);
   const stats = getEmployeePeriodStats(allDays, employees, config, data);
   const label = state.report.payrollMode ? "Total working hours" : periodLabel;
-  let html = `<tr class="report-total-row report-period-row"><td></td><td>${esc(label)}</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
+  let html = "";
+
+  if (state.report.payrollMode) {
+    html += `<tr class="report-period-header-row"><td colspan="${employees.length + 3}">Month Totals</td></tr>`;
+  }
+
+  html += `<tr class="report-total-row report-period-row"><td></td><td>${esc(label)}</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
 
   if (state.report.payrollMode) {
     html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Weekday evening shift hours 18-24 o'clock</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].weekdayEvening)}</td>`).join("")}</tr>`;
