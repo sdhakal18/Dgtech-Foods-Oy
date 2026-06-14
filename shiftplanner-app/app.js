@@ -502,6 +502,7 @@ function getEmployeePeriodStats(days, employees, config, data) {
       sunday: 0,
       holiday: 0,
       sundayOrHolidayEvening: 0,
+      workingDays: 0,
     };
     for (const day of days) {
       const entry = data[day]?.[employee];
@@ -513,6 +514,7 @@ function getEmployeePeriodStats(days, employees, config, data) {
       const eve = eveningHoursForEntry(entry);
       
       stats[employee].total += hrs;
+      stats[employee].workingDays += 1;
       
       if (info.isSunday) {
         stats[employee].sunday += hrs;
@@ -1450,6 +1452,7 @@ function reportWeekTotalRow(group, employees, config, data) {
     html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Holiday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
     html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Sunday or Weekday holidays evening shift hours klo 18-24</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sundayOrHolidayEvening)}</td>`).join("")}</tr>`;
   }
+  html += `<tr class="report-total-row report-breakdown-row"><td></td><td>Total working days</td><td></td>${employees.map(emp => `<td>${stats[emp].workingDays}</td>`).join("")}</tr>`;
   return html;
 }
 
@@ -1465,6 +1468,7 @@ function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) 
     html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Holiday working hours</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].holiday)}</td>`).join("")}</tr>`;
     html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Sunday or Weekday holidays evening shift hours klo 18-24</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].sundayOrHolidayEvening)}</td>`).join("")}</tr>`;
   }
+  html += `<tr class="report-total-row report-period-row report-breakdown-row"><td></td><td>Total working days</td><td></td>${employees.map(emp => `<td>${stats[emp].workingDays}</td>`).join("")}</tr>`;
   return html;
 }
 
