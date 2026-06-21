@@ -1984,6 +1984,20 @@ th {
   max-height: calc(100vh - 170px) !important;
 }
 
+.workspace:fullscreen #duplicateModal {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 999999 !important;
+}
+
+.workspace:fullscreen #toast {
+  position: absolute !important;
+  right: 20px !important;
+  bottom: 20px !important;
+  z-index: 999999 !important;
+}
+
+
 /* Paintbrush planning mode styles */
 .paint-cursor-active .schedule-cell {
   cursor: cell !important;
