@@ -1733,29 +1733,63 @@ function openDuplicateModalWithPeriod(periodType) {
   el.modalToYear.value = state.year;
   el.modalToMonth.value = state.month;
 
+  let prevMonth = state.month - 1;
+  let prevYear = state.year;
+  if (prevMonth < 0) {
+    prevMonth = 11;
+    prevYear -= 1;
+  }
+
   if (periodType === "month") {
-    let prevMonth = state.month - 1;
-    let prevYear = state.year;
-    if (prevMonth < 0) {
-      prevMonth = 11;
-      prevYear -= 1;
-    }
     el.modalFromYear.value = prevYear;
     el.modalFromMonth.value = prevMonth;
+    updateModalBlocks();
   } else {
+    let activeBlockValue = "";
+    if (pipActiveDay !== null) {
+      const activeDate = new Date(state.year, state.month, pipActiveDay);
+      const activeBlocks = duplicateBlocks(periodType, state.year, state.month);
+      const foundBlock = activeBlocks.find(b =>
+        b.dates.some(d => d.getFullYear() === activeDate.getFullYear() && d.getMonth() === activeDate.getMonth() && d.getDate() === activeDate.getDate())
+      );
+      if (foundBlock) {
+        activeBlockValue = foundBlock.value;
+      }
+    }
+
     el.modalFromYear.value = state.year;
     el.modalFromMonth.value = state.month;
+    el.modalToYear.value = state.year;
+    el.modalToMonth.value = state.month;
     updateModalBlocks();
 
     const fromOptions = [...el.modalFromBlock.options];
     const toOptions = [...el.modalToBlock.options];
-    if (fromOptions.length > 0) {
-      if (fromOptions.length >= 2) {
-        el.modalFromBlock.selectedIndex = fromOptions.length - 2;
-        el.modalToBlock.selectedIndex = toOptions.length - 1;
-      } else {
-        el.modalFromBlock.selectedIndex = 0;
-        el.modalToBlock.selectedIndex = 0;
+
+    let targetIdx = -1;
+    if (activeBlockValue) {
+      targetIdx = toOptions.findIndex(opt => opt.value === activeBlockValue);
+    }
+    if (targetIdx === -1) {
+      targetIdx = toOptions.length - 1;
+    }
+
+    if (targetIdx > 0) {
+      el.modalFromYear.value = state.year;
+      el.modalFromMonth.value = state.month;
+      updateModalBlocks();
+      el.modalToBlock.selectedIndex = targetIdx;
+      el.modalFromBlock.selectedIndex = targetIdx - 1;
+    } else {
+      el.modalToBlock.selectedIndex = 0;
+
+      el.modalFromYear.value = prevYear;
+      el.modalFromMonth.value = prevMonth;
+      updateModalBlocks();
+
+      const prevFromOptions = [...el.modalFromBlock.options];
+      if (prevFromOptions.length > 0) {
+        el.modalFromBlock.selectedIndex = prevFromOptions.length - 1;
       }
     }
   }
