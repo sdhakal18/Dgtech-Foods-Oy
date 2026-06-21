@@ -498,7 +498,7 @@ function eveningHoursForEntry(entry) {
   return calculateEveningHours(entry.shift);
 }
 
-function getEmployeePeriodStats(days, employees, config, data) {
+function getEmployeePeriodStats(dates, employees, config) {
   const stats = {};
   for (const employee of employees) {
     stats[employee] = {
@@ -509,13 +509,13 @@ function getEmployeePeriodStats(days, employees, config, data) {
       sundayOrHolidayEvening: 0,
       workingDays: 0,
     };
-    for (const day of days) {
-      const entry = data[day]?.[employee];
+    for (const date of dates) {
+      const entry = dataForDate(date)?.[employee];
       if (!entry) continue;
       if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location)) continue;
       const hrs = hoursForEntry(entry);
       if (hrs <= 0) continue;
-      const info = dayInfo(day);
+      const info = dateInfo(date);
       const eve = eveningHoursForEntry(entry);
       
       stats[employee].total += hrs;
@@ -553,6 +553,18 @@ function esc(value) {
 
 function dayInfo(day) {
   const date = new Date(state.year, state.month, day);
+  const holidayName = finnishHolidayName(date);
+  const isSunday = date.getDay() === 0;
+  return {
+    label: date.toLocaleDateString("en-US", { weekday: "short" }),
+    isoWeek: getISOWeek(date),
+    holidayName,
+    isSunday,
+    isRedDay: isSunday || Boolean(holidayName),
+  };
+}
+
+function dateInfo(date) {
   const holidayName = finnishHolidayName(date);
   const isSunday = date.getDay() === 0;
   return {
@@ -673,6 +685,28 @@ function daysForPeriod(period = "month", value = "") {
   return allDays;
 }
 
+function datesForReportPeriod(periodType, value) {
+  const year = state.year;
+  const month = state.month;
+
+  if (periodType === "week") {
+    const blocks = duplicateBlocks("week", year, month);
+    const block =
+      blocks.find((item) => item.value === value) ??
+      blocks.find((item) => item.dates.some((date) => String(getISOWeek(date)) === String(value))) ??
+      blocks[0];
+    return block?.dates ?? [];
+  }
+
+  if (periodType === "twoWeeks" || periodType === "threeWeeks") {
+    const blocks = duplicateBlocks(periodType, year, month);
+    const block = blocks.find((item) => item.value === value) ?? blocks[0];
+    return block?.dates ?? [];
+  }
+
+  return duplicateBlocks("month", year, month)[0]?.dates ?? [];
+}
+
 function daysInSpecificMonth(year, month) {
   return new Date(year, month + 1, 0).getDate();
 }
@@ -730,7 +764,6 @@ function logHistory(action) {
 
 function getStats(options = {}) {
   normalizeMonthData();
-  const data = ensureMonth();
   const employees = options.employees ?? state.employees;
   const selectedDays = options.days ?? daysForPeriod();
   const selectedLocation = options.location ?? "";
@@ -752,11 +785,14 @@ function getStats(options = {}) {
   let total = 0;
   let shiftsWorked = 0;
 
-  for (const day of selectedDays) {
-    const week = dayInfo(day).isoWeek;
+  for (const item of selectedDays) {
+    const isDate = item instanceof Date;
+    const date = isDate ? item : new Date(state.year, state.month, item);
+    const week = getISOWeek(date);
     weekStats[week] ??= { total: 0, shifts: 0, days: new Set() };
     for (const employee of employees) {
-      const entry = data[day][employee];
+      const entry = dataForDate(date)?.[employee];
+      if (!entry) continue;
       if (!canSeeEntry(employee, entry)) continue;
       if (selectedLocation && entry.location !== selectedLocation) continue;
       const hours = hoursForEntry(entry);
@@ -776,13 +812,21 @@ function getStats(options = {}) {
           locationStats[location].byEmployee[employee] = (locationStats[location].byEmployee[employee] ?? 0) + hours;
         }
         weekStats[week].shifts += 1;
-        weekStats[week].days.add(day);
+        weekStats[week].days.add(date.getDate());
       }
       weekStats[week].total += hours;
     }
   }
 
-  return { total, shiftsWorked, employeeStats, locationStats, weekStats };
+  return {
+    total,
+    shiftsWorked,
+    employeeStats,
+    locationStats,
+    weekStats: Object.fromEntries(
+      Object.entries(weekStats).map(([wk, s]) => [wk, { ...s, days: s.days.size }]),
+    ),
+  };
 }
 
 function renderSelectors() {
@@ -1336,45 +1380,43 @@ function getReportConfig() {
   let title = `${monthNames[state.month]} ${state.year}`;
   let employees = [...state.employees];
   let location = "";
-  let days = daysForPeriod();
 
-  if (type === "employee") {
-    employees = [isEmployee() ? state.activeEmployee : state.report.employee];
-    title = `${employees[0]} - ${title}`;
-  }
-  if (type === "restaurant") {
-    location = state.report.location;
-    title = `${location} - ${title}`;
-  }
+  let dates = [];
   if (type === "week") {
-    days = daysForPeriod("week", state.report.week);
+    dates = datesForReportPeriod("week", state.report.week);
     title = `Week ${state.report.week} - ${title}`;
     if (isEmployee()) employees = [state.activeEmployee];
-  }
-  if (type === "twoWeeks") {
-    days = daysForPeriod("twoWeeks", state.report.twoWeek);
-    const first = days[0] ?? 1;
-    const last = days.at(-1) ?? daysInMonth();
-    title = `Days ${first}-${last} - ${title}`;
+  } else if (type === "twoWeeks") {
+    dates = datesForReportPeriod("twoWeeks", state.report.twoWeek);
+    const first = formatShortDate(dates[0]);
+    const last = formatShortDate(dates.at(-1));
+    title = `Period ${first} to ${last} - ${title}`;
+    if (isEmployee()) employees = [state.activeEmployee];
+  } else if (type === "threeWeeks") {
+    dates = datesForReportPeriod("threeWeeks", state.report.threeWeek);
+    const first = formatShortDate(dates[0]);
+    const last = formatShortDate(dates.at(-1));
+    title = `Period ${first} to ${last} - ${title}`;
+    if (isEmployee()) employees = [state.activeEmployee];
+  } else {
+    dates = datesForReportPeriod("month");
+    if (type === "employee") {
+      employees = [isEmployee() ? state.activeEmployee : state.report.employee];
+      title = `${employees[0]} - ${title}`;
+    } else if (type === "restaurant") {
+      location = state.report.location;
+      title = `${location} - ${title}`;
+    }
     if (isEmployee()) employees = [state.activeEmployee];
   }
-  if (type === "threeWeeks") {
-    days = daysForPeriod("threeWeeks", state.report.threeWeek);
-    const first = days[0] ?? 1;
-    const last = days.at(-1) ?? daysInMonth();
-    title = `Days ${first}-${last} - ${title}`;
-    if (isEmployee()) employees = [state.activeEmployee];
-  }
-  if (type === "month" && isEmployee()) employees = [state.activeEmployee];
 
-  return { type, title, employees, location, days };
+  return { type, title, employees, location, days: dates };
 }
 
 function buildReportHtml(config = getReportConfig()) {
-  const data = ensureMonth();
   const visibleEmployees = config.employees.filter((employee) =>
-    config.days.some((day) => {
-      const entry = data[day]?.[employee];
+    config.days.some((date) => {
+      const entry = dataForDate(date)?.[employee];
       if (!entry) return false;
       if (!canSeeEntry(employee, entry)) return false;
       if (config.location && entry.location !== config.location) return false;
@@ -1390,22 +1432,22 @@ function buildReportHtml(config = getReportConfig()) {
     ? weekGroups
         .map((group) =>
           `${group.days
-            .map((day) => {
-              const info = dayInfo(day);
+            .map((date) => {
+              const info = dateInfo(date);
               const dayCells = reportEmployees
                 .map((employee) => {
-                  const entry = data[day]?.[employee];
+                  const entry = dataForDate(date)?.[employee];
                   if (!canSeeEntry(employee, entry) || (config.location && entry.location !== config.location) || hoursForEntry(entry) <= 0) return "<td></td>";
                   return `<td>${reportShiftHtml(entry)}</td>`;
                 })
                 .join("");
-              return `<tr class="${info.isRedDay ? "report-red-day" : ""}"><td></td><td class="${info.isRedDay ? "report-red-day-cell" : ""}">${esc(reportDayName(day))}</td><td class="${info.isRedDay ? "report-red-day-cell" : ""}">${esc(reportDateLabel(day))}</td>${dayCells}</tr>`;
+              return `<tr class="${info.isRedDay ? "report-red-day" : ""}"><td></td><td class="${info.isRedDay ? "report-red-day-cell" : ""}">${esc(reportDayName(date))}</td><td class="${info.isRedDay ? "report-red-day-cell" : ""}">${esc(reportDateLabel(date))}</td>${dayCells}</tr>`;
             })
-            .join("")}${reportWeekTotalRow(group, reportEmployees, config, data)}`,
+            .join("")}${reportWeekTotalRow(group, reportEmployees, config)}`,
         )
         .join("")
     : "";
-  const totalRow = reportPeriodTotalRow(reportEmployees, weekGroups, config, data, periodLabel);
+  const totalRow = reportPeriodTotalRow(reportEmployees, weekGroups, config, periodLabel);
 
   return `
     <article class="print-report">
@@ -1446,8 +1488,8 @@ function reportRestaurantTotalCards(config) {
   return `<section class="report-kpis">${locationCards}${totalCard}</section>`;
 }
 
-function reportWeekTotalRow(group, employees, config, data) {
-  const stats = getEmployeePeriodStats(group.days, employees, config, data);
+function reportWeekTotalRow(group, employees, config) {
+  const stats = getEmployeePeriodStats(group.days, employees, config);
   const label = state.report.payrollMode ? "Total working hours" : "Total";
   let html = `<tr class="report-total-row"><td></td><td>${esc(label)}</td><td></td>${employees.map(emp => `<td>${formatNumber(stats[emp].total)}</td>`).join("")}</tr>`;
 
@@ -1461,9 +1503,9 @@ function reportWeekTotalRow(group, employees, config, data) {
   return html;
 }
 
-function reportPeriodTotalRow(employees, weekGroups, config, data, periodLabel) {
-  const allDays = weekGroups.flatMap((group) => group.days);
-  const stats = getEmployeePeriodStats(allDays, employees, config, data);
+function reportPeriodTotalRow(employees, weekGroups, config, periodLabel) {
+  const allDates = weekGroups.flatMap((group) => group.days);
+  const stats = getEmployeePeriodStats(allDates, employees, config);
   const label = state.report.payrollMode ? "Total working hours" : periodLabel;
   let html = "";
 
@@ -1495,25 +1537,26 @@ function reportShiftHtml(entry) {
   return `${esc(reportShiftText(entry))}${comment ? `<small class="report-comment">${esc(comment)}</small>` : ""}`;
 }
 
-function reportDayName(day) {
-  return new Date(state.year, state.month, day).toLocaleDateString("en-US", { weekday: "long" });
+function reportDayName(date) {
+  return date.toLocaleDateString("en-US", { weekday: "long" });
 }
 
-function reportDateLabel(day) {
-  return new Date(state.year, state.month, day).toLocaleDateString("en-US", { day: "numeric", month: "short" }).replace(" ", "-");
+function reportDateLabel(date) {
+  return date.toLocaleDateString("en-US", { day: "numeric", month: "short" }).replace(" ", "-");
 }
 
-function reportWeekGroups(days) {
-  const selected = new Set(days.map(String));
-  return duplicateBlocks("week", state.year, state.month)
-    .map((block) => ({
-      week: dayInfo(block.dates.find((date) => date.getFullYear() === state.year && date.getMonth() === state.month)?.getDate() ?? 1).isoWeek,
-      days: block.dates
-        .filter((date) => date.getFullYear() === state.year && date.getMonth() === state.month)
-        .map((date) => date.getDate())
-        .filter((day) => selected.has(String(day))),
-    }))
-    .filter((group) => group.days.length);
+function reportWeekGroups(dates) {
+  const groups = [];
+  for (const date of dates) {
+    const week = getISOWeek(date);
+    let group = groups.find((g) => g.week === week);
+    if (!group) {
+      group = { week, days: [] };
+      groups.push(group);
+    }
+    group.days.push(date);
+  }
+  return groups;
 }
 
 function renderReportPreview() {
@@ -2138,6 +2181,8 @@ function renderPip(day, employee) {
     pip.style.height = "";
     pip.style.left = "";
     pip.style.top = "";
+    pip.style.bottom = "24px";
+    pip.style.right = "24px";
   }
 
   const weekBlock = duplicateBlocks("week", state.year, state.month).find(block => 
@@ -2179,7 +2224,7 @@ function renderPip(day, employee) {
       else if (shiftVal === "Sick leave") shiftClass += " pip-sick";
       else if (shiftVal === "Wish OFF") shiftClass += " pip-wish";
 
-      const compactText = formatShiftCompact(shiftVal);
+      const compactText = formatShiftCompact(shiftVal, entry?.location);
       const cellClass = [
         isEditingCell ? "pip-cell-editing" : "",
         isEditingRow ? "pip-row-focused" : "",
@@ -2253,13 +2298,29 @@ function renderPip(day, employee) {
   }
 }
 
-function formatShiftCompact(shift) {
+function formatShiftCompact(shift, location = "") {
   if (!shift || shift === "00:00-00:00" || shift === "OFF") return "—";
   if (shift === "Sick leave") return "Sick";
   if (shift === "Wish OFF") return "Wish";
-  const match = shift.match(/^(\d{2}):\d{2}-(\d{2}):\d{2}$/);
-  if (match) return `${match[1]}-${match[2]}`;
-  return shift;
+
+  let formatted = shift;
+  const match = shift.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+  if (match) {
+    const startHour = match[1];
+    const startMin = match[2];
+    const endHour = match[3];
+    const endMin = match[4];
+
+    const startStr = startMin === "00" ? startHour : `${startHour}:${startMin}`;
+    const endStr = endMin === "00" ? endHour : `${endHour}:${endMin}`;
+    formatted = `${startStr}-${endStr}`;
+  }
+
+  if (isYloLocation(location)) {
+    formatted += " (Y)";
+  }
+
+  return formatted;
 }
 
 function seedMaySample() {

@@ -1973,6 +1973,10 @@ th {
   padding: 16px 24px !important;
   background-color: var(--page) !important;
   overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 100vh !important;
+  box-sizing: border-box !important;
 }
 
 .workspace:fullscreen .topbar {
@@ -1980,8 +1984,16 @@ th {
   border-bottom: 1px solid var(--line) !important;
 }
 
+.workspace:fullscreen .view-panel.active,
+.workspace:fullscreen #scheduleView {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+
 .workspace:fullscreen .schedule-table {
-  max-height: calc(100vh - 170px) !important;
+  height: calc(100vh - 154px) !important;
+  max-height: calc(100vh - 154px) !important;
+  min-height: calc(100vh - 154px) !important;
 }
 
 .workspace:fullscreen #duplicateModal {
@@ -2018,6 +2030,8 @@ th {
 /* Floating Picture in Picture (PiP) Window */
 .pip-window {
   position: absolute;
+  right: 24px;
+  bottom: 24px;
   width: max-content;
   height: max-content;
   min-width: 400px;
