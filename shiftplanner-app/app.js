@@ -172,7 +172,12 @@ const el = {
   newEmployerEmail: document.querySelector("#newEmployerEmail"),
   newEmployerUsername: document.querySelector("#newEmployerUsername"),
   newEmployerPassword: document.querySelector("#newEmployerPassword"),
-  openDuplicateBtn: document.querySelector("#openDuplicateBtn"),
+  openDuplicateDropdownBtn: document.querySelector("#openDuplicateDropdownBtn"),
+  duplicateMenu: document.querySelector("#duplicateMenu"),
+  dupLastWeekBtn: document.querySelector("#dupLastWeekBtn"),
+  dupLastTwoWeeksBtn: document.querySelector("#dupLastTwoWeeksBtn"),
+  dupLastThreeWeeksBtn: document.querySelector("#dupLastThreeWeeksBtn"),
+  dupLastMonthBtn: document.querySelector("#dupLastMonthBtn"),
   publishDropdownBtn: document.querySelector("#publishDropdownBtn"),
   publishMenu: document.querySelector("#publishMenu"),
   publishWeekBtn: document.querySelector("#publishWeekBtn"),
@@ -1681,12 +1686,9 @@ function publishPeriod(period, targetValue = "") {
 
 function publishButtonState() {
   const isEmp = isEmployer();
-  if (el.openDuplicateBtn) {
-    el.openDuplicateBtn.style.display = isEmp ? "flex" : "none";
-  }
-  const publishContainer = document.querySelector(".publish-dropdown-container");
-  if (publishContainer) {
-    publishContainer.style.display = isEmp ? "inline-block" : "none";
+  const duplicateContainer = document.querySelector(".duplicate-dropdown-container");
+  if (duplicateContainer) {
+    duplicateContainer.style.display = isEmp ? "inline-block" : "none";
   }
 }
 
@@ -1720,6 +1722,42 @@ function toggleDuplicateModal(show) {
     el.duplicateModal.style.display = "flex";
   } else {
     el.duplicateModal.style.display = "none";
+  }
+}
+
+function openDuplicateModalWithPeriod(periodType) {
+  toggleDuplicateModal(true);
+  el.modalDupPeriod.value = periodType;
+  updateModalBlocks();
+
+  el.modalToYear.value = state.year;
+  el.modalToMonth.value = state.month;
+
+  if (periodType === "month") {
+    let prevMonth = state.month - 1;
+    let prevYear = state.year;
+    if (prevMonth < 0) {
+      prevMonth = 11;
+      prevYear -= 1;
+    }
+    el.modalFromYear.value = prevYear;
+    el.modalFromMonth.value = prevMonth;
+  } else {
+    el.modalFromYear.value = state.year;
+    el.modalFromMonth.value = state.month;
+    updateModalBlocks();
+
+    const fromOptions = [...el.modalFromBlock.options];
+    const toOptions = [...el.modalToBlock.options];
+    if (fromOptions.length > 0) {
+      if (fromOptions.length >= 2) {
+        el.modalFromBlock.selectedIndex = fromOptions.length - 2;
+        el.modalToBlock.selectedIndex = toOptions.length - 1;
+      } else {
+        el.modalFromBlock.selectedIndex = 0;
+        el.modalToBlock.selectedIndex = 0;
+      }
+    }
   }
 }
 
@@ -3095,9 +3133,50 @@ document.querySelector("#addLocation").addEventListener("click", addLocation);
 document.querySelector("#addEmployer").addEventListener("click", addEmployer);
 document.querySelector("#openReport").addEventListener("click", openReportWindow);
 
-if (el.openDuplicateBtn) {
-    el.openDuplicateBtn.addEventListener("click", () => toggleDuplicateModal(true));
+  if (el.openDuplicateDropdownBtn) {
+    el.openDuplicateDropdownBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isVisible = el.duplicateMenu.style.display === "flex";
+      el.duplicateMenu.style.display = isVisible ? "none" : "flex";
+    });
   }
+
+  if (el.dupLastWeekBtn) {
+    el.dupLastWeekBtn.addEventListener("click", () => {
+      if (el.duplicateMenu) el.duplicateMenu.style.display = "none";
+      openDuplicateModalWithPeriod("week");
+    });
+  }
+
+  if (el.dupLastTwoWeeksBtn) {
+    el.dupLastTwoWeeksBtn.addEventListener("click", () => {
+      if (el.duplicateMenu) el.duplicateMenu.style.display = "none";
+      openDuplicateModalWithPeriod("twoWeeks");
+    });
+  }
+
+  if (el.dupLastThreeWeeksBtn) {
+    el.dupLastThreeWeeksBtn.addEventListener("click", () => {
+      if (el.duplicateMenu) el.duplicateMenu.style.display = "none";
+      openDuplicateModalWithPeriod("threeWeeks");
+    });
+  }
+
+  if (el.dupLastMonthBtn) {
+    el.dupLastMonthBtn.addEventListener("click", () => {
+      if (el.duplicateMenu) el.duplicateMenu.style.display = "none";
+      openDuplicateModalWithPeriod("month");
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (el.duplicateMenu && el.duplicateMenu.style.display === "flex") {
+      if (!e.target.closest(".duplicate-dropdown-container")) {
+        el.duplicateMenu.style.display = "none";
+      }
+    }
+  });
+
   if (el.closeDuplicateModal) {
     el.closeDuplicateModal.addEventListener("click", () => toggleDuplicateModal(false));
   }
