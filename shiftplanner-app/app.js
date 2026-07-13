@@ -687,24 +687,59 @@ function daysForPeriod(period = "month", value = "") {
 
 function datesForReportPeriod(periodType, value) {
   const year = state.year;
-  const month = state.month;
-
+  const startWeek = Number(value) || 1;
+  
   if (periodType === "week") {
-    const blocks = duplicateBlocks("week", year, month);
-    const block =
-      blocks.find((item) => item.value === value) ??
-      blocks.find((item) => item.dates.some((date) => String(getISOWeek(date)) === String(value))) ??
-      blocks[0];
-    return block?.dates ?? [];
+    return getDatesOfISOWeek(startWeek, year);
   }
-
-  if (periodType === "twoWeeks" || periodType === "threeWeeks") {
-    const blocks = duplicateBlocks(periodType, year, month);
-    const block = blocks.find((item) => item.value === value) ?? blocks[0];
-    return block?.dates ?? [];
+  
+  if (periodType === "twoWeeks") {
+    return getDatesOfISOWeekRange(startWeek, 2, year);
   }
+  
+  if (periodType === "threeWeeks") {
+    return getDatesOfISOWeekRange(startWeek, 3, year);
+  }
+  
+  const blocks = duplicateBlocks("week", year, state.month);
+  const allDates = [];
+  for (const block of blocks) {
+    allDates.push(...block.dates);
+  }
+  return allDates;
+}
 
-  return duplicateBlocks("month", year, month)[0]?.dates ?? [];
+function getNumWeeksInYear(year) {
+  const d = new Date(year, 11, 28);
+  return getISOWeek(d);
+}
+
+function getDatesOfISOWeek(week, year) {
+  const simple = new Date(year, 0, 1);
+  const dayOfWeek = simple.getDay() || 7;
+  let monday = simple;
+  if (dayOfWeek <= 4) {
+    monday = addDays(simple, 1 - dayOfWeek);
+  } else {
+    monday = addDays(simple, 8 - dayOfWeek);
+  }
+  const targetMonday = addDays(monday, (week - 1) * 7);
+  return dateRange(targetMonday, 7);
+}
+
+function getDatesOfISOWeekRange(startWeek, lengthInWeeks, year) {
+  const dates = [];
+  for (let w = 0; w < lengthInWeeks; w++) {
+    let targetWeek = startWeek + w;
+    let targetYear = year;
+    const totalWeeks = getNumWeeksInYear(year);
+    if (targetWeek > totalWeeks) {
+      targetWeek -= totalWeeks;
+      targetYear += 1;
+    }
+    dates.push(...getDatesOfISOWeek(targetWeek, targetYear));
+  }
+  return dates;
 }
 
 function daysInSpecificMonth(year, month) {
@@ -910,21 +945,29 @@ function renderReportSelectors() {
   renderSelect(el.reportEmployee, state.employees, state.report.employee);
   renderSelect(el.reportLocation, state.locations, state.report.location);
 
-  const weeks = availableWeeks().map(String);
-  if (!weeks.includes(String(state.report.week))) state.report.week = weeks[0] ?? "";
-  renderSelect(el.reportWeek, weeks.map((week) => `Week ${week}`), `Week ${state.report.week}`);
-  [...el.reportWeek.options].forEach((option) => {
-    option.value = option.textContent.replace("Week ", "");
-  });
-  el.reportWeek.value = String(state.report.week);
+  const totalWeeks = getNumWeeksInYear(state.year);
+  const weekOptions = Array.from({ length: totalWeeks }, (_, idx) => idx + 1);
 
-  const twoWeekBlocks = duplicateBlocks("twoWeeks", state.year, state.month);
-  if (!twoWeekBlocks.some((block) => block.value === state.report.twoWeek)) state.report.twoWeek = twoWeekBlocks[0]?.value ?? "";
-  el.reportTwoWeek.innerHTML = twoWeekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.report.twoWeek ? "selected" : ""}>${esc(block.label)}</option>`).join("");
+  if (!state.report.week || Number(state.report.week) > totalWeeks) {
+    state.report.week = "1";
+  }
+  el.reportWeek.innerHTML = weekOptions
+    .map(w => `<option value="${w}" ${String(w) === String(state.report.week) ? "selected" : ""}>Week ${w}</option>`)
+    .join("");
 
-  const threeWeekBlocks = duplicateBlocks("threeWeeks", state.year, state.month);
-  if (!threeWeekBlocks.some((block) => block.value === state.report.threeWeek)) state.report.threeWeek = threeWeekBlocks[0]?.value ?? "";
-  el.reportThreeWeek.innerHTML = threeWeekBlocks.map((block) => `<option value="${esc(block.value)}" ${block.value === state.report.threeWeek ? "selected" : ""}>${esc(block.label)}</option>`).join("");
+  if (!state.report.twoWeek || Number(state.report.twoWeek) > totalWeeks - 1) {
+    state.report.twoWeek = "1";
+  }
+  el.reportTwoWeek.innerHTML = Array.from({ length: totalWeeks - 1 }, (_, idx) => idx + 1)
+    .map(w => `<option value="${w}" ${String(w) === String(state.report.twoWeek) ? "selected" : ""}>Weeks ${w}-${w+1}</option>`)
+    .join("");
+
+  if (!state.report.threeWeek || Number(state.report.threeWeek) > totalWeeks - 2) {
+    state.report.threeWeek = "1";
+  }
+  el.reportThreeWeek.innerHTML = Array.from({ length: totalWeeks - 2 }, (_, idx) => idx + 1)
+    .map(w => `<option value="${w}" ${String(w) === String(state.report.threeWeek) ? "selected" : ""}>Weeks ${w}-${w+2}</option>`)
+    .join("");
 
   if (el.reportPayrollMode) {
     el.reportPayrollMode.checked = Boolean(state.report.payrollMode);
