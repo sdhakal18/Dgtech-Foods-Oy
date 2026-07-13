@@ -740,7 +740,9 @@ function duplicateBlocks(period, year, month) {
   for (let start = mondayOnOrBefore(firstDay), block = 1; start <= lastDay; start = addDays(start, blockLength), block += 1) {
     const dates = dateRange(start, blockLength);
     if (!blockTouchesMonth(dates, year, month)) continue;
-    const prefix = period === "threeWeeks" ? `3 weeks ${block}` : period === "twoWeeks" ? `2 weeks ${block}` : `Week ${block}`;
+    const prefix = period === "threeWeeks" || period === "twoWeeks"
+      ? `Weeks ${getISOWeek(dates[0])}-${getISOWeek(dates.at(-1))}`
+      : `Week ${getISOWeek(dates[0])}`;
     blocks.push({
       label: `${prefix}: ${formatShortDate(dates[0])}-${formatShortDate(dates.at(-1))}`,
       value: dateKey(dates[0]),
@@ -1384,19 +1386,33 @@ function getReportConfig() {
   let dates = [];
   if (type === "week") {
     dates = datesForReportPeriod("week", state.report.week);
-    title = `Week ${state.report.week} - ${title}`;
+    if (dates.length > 0) {
+      const first = formatShortDate(dates[0]);
+      const last = formatShortDate(dates.at(-1));
+      title = `Week ${state.report.week} (${first} to ${last}) - ${title}`;
+    } else {
+      title = `Week ${state.report.week} - ${title}`;
+    }
     if (isEmployee()) employees = [state.activeEmployee];
   } else if (type === "twoWeeks") {
     dates = datesForReportPeriod("twoWeeks", state.report.twoWeek);
-    const first = formatShortDate(dates[0]);
-    const last = formatShortDate(dates.at(-1));
-    title = `Period ${first} to ${last} - ${title}`;
+    if (dates.length > 0) {
+      const first = formatShortDate(dates[0]);
+      const last = formatShortDate(dates.at(-1));
+      title = `Weeks ${getISOWeek(dates[0])}-${getISOWeek(dates.at(-1))} (${first} to ${last}) - ${title}`;
+    } else {
+      title = `Two weeks - ${title}`;
+    }
     if (isEmployee()) employees = [state.activeEmployee];
   } else if (type === "threeWeeks") {
     dates = datesForReportPeriod("threeWeeks", state.report.threeWeek);
-    const first = formatShortDate(dates[0]);
-    const last = formatShortDate(dates.at(-1));
-    title = `Period ${first} to ${last} - ${title}`;
+    if (dates.length > 0) {
+      const first = formatShortDate(dates[0]);
+      const last = formatShortDate(dates.at(-1));
+      title = `Weeks ${getISOWeek(dates[0])}-${getISOWeek(dates.at(-1))} (${first} to ${last}) - ${title}`;
+    } else {
+      title = `Three weeks - ${title}`;
+    }
     if (isEmployee()) employees = [state.activeEmployee];
   } else {
     dates = datesForReportPeriod("month");
@@ -1586,11 +1602,15 @@ function openReportWindow() {
   let titleStr = "";
 
   if (config.type === "week") {
-    titleStr = `Dgtech foods oy_Shift_Week${state.report.week}_${monthName}`;
-  } else if (config.type === "twoWeeks") {
-    titleStr = `Dgtech foods oy_Shift_2Weeks_${monthName}`;
-  } else if (config.type === "threeWeeks") {
-    titleStr = `Dgtech foods oy_Shift_3Weeks_${monthName}`;
+    titleStr = `Dgtech foods oy_Shift_Week${state.report.week}`;
+  } else if (config.type === "twoWeeks" || config.type === "threeWeeks") {
+    if (config.days && config.days.length > 0) {
+      const wStart = getISOWeek(config.days[0]);
+      const wEnd = getISOWeek(config.days.at(-1));
+      titleStr = `Dgtech foods oy_Shift_Weeks${wStart}-${wEnd}`;
+    } else {
+      titleStr = `Dgtech foods oy_Shift_${config.type}`;
+    }
   } else {
     titleStr = `Dgtech foods oy_Shift_${monthName}`;
   }
@@ -2110,11 +2130,18 @@ function makeElementDraggable(elmnt, header) {
     const newLeft = elmnt.offsetLeft - pos1;
     
     const workspace = document.querySelector(".workspace");
-    const maxTop = (workspace ? workspace.clientHeight : window.innerHeight) - elmnt.offsetHeight;
-    const maxLeft = (workspace ? workspace.clientWidth : window.innerWidth) - elmnt.offsetWidth;
+    const scrollTop = workspace ? workspace.scrollTop : 0;
+    const scrollLeft = workspace ? workspace.scrollLeft : 0;
+    const viewportHeight = workspace ? workspace.clientHeight : window.innerHeight;
+    const viewportWidth = workspace ? workspace.clientWidth : window.innerWidth;
     
-    elmnt.style.top = Math.max(0, Math.min(newTop, maxTop)) + "px";
-    elmnt.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + "px";
+    const minTop = scrollTop;
+    const maxTop = scrollTop + viewportHeight - elmnt.offsetHeight;
+    const minLeft = scrollLeft;
+    const maxLeft = scrollLeft + viewportWidth - elmnt.offsetWidth;
+    
+    elmnt.style.top = Math.max(minTop, Math.min(newTop, maxTop)) + "px";
+    elmnt.style.left = Math.max(minLeft, Math.min(newLeft, maxLeft)) + "px";
     elmnt.style.bottom = "auto";
     elmnt.style.right = "auto";
   }
