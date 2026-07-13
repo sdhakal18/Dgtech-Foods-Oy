@@ -945,26 +945,27 @@ function renderReportSelectors() {
   renderSelect(el.reportEmployee, state.employees, state.report.employee);
   renderSelect(el.reportLocation, state.locations, state.report.location);
 
-  const weeks = availableWeeks();
+  const totalWeeks = getNumWeeksInYear(state.year);
+  const weekOptions = Array.from({ length: totalWeeks }, (_, idx) => idx + 1);
 
-  if (!state.report.week || !weeks.includes(Number(state.report.week))) {
-    state.report.week = String(weeks[0] || 1);
+  if (!state.report.week || Number(state.report.week) > totalWeeks) {
+    state.report.week = "1";
   }
-  el.reportWeek.innerHTML = weeks
+  el.reportWeek.innerHTML = weekOptions
     .map(w => `<option value="${w}" ${String(w) === String(state.report.week) ? "selected" : ""}>Week ${w}</option>`)
     .join("");
 
-  if (!state.report.twoWeek || !weeks.includes(Number(state.report.twoWeek))) {
-    state.report.twoWeek = String(weeks[0] || 1);
+  if (!state.report.twoWeek || Number(state.report.twoWeek) > totalWeeks - 1) {
+    state.report.twoWeek = "1";
   }
-  el.reportTwoWeek.innerHTML = weeks
+  el.reportTwoWeek.innerHTML = Array.from({ length: totalWeeks - 1 }, (_, idx) => idx + 1)
     .map(w => `<option value="${w}" ${String(w) === String(state.report.twoWeek) ? "selected" : ""}>Weeks ${w}-${w+1}</option>`)
     .join("");
 
-  if (!state.report.threeWeek || !weeks.includes(Number(state.report.threeWeek))) {
-    state.report.threeWeek = String(weeks[0] || 1);
+  if (!state.report.threeWeek || Number(state.report.threeWeek) > totalWeeks - 2) {
+    state.report.threeWeek = "1";
   }
-  el.reportThreeWeek.innerHTML = weeks
+  el.reportThreeWeek.innerHTML = Array.from({ length: totalWeeks - 2 }, (_, idx) => idx + 1)
     .map(w => `<option value="${w}" ${String(w) === String(state.report.threeWeek) ? "selected" : ""}>Weeks ${w}-${w+2}</option>`)
     .join("");
 
